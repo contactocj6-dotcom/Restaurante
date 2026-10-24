@@ -1,0 +1,6 @@
+{
+  "name": "RestoFlow - Gestión de Restaurante",
+  "description": "Sistema integral de gestión de restaurantes con comandas móviles, control de mesas, cocina en tiempo real y sincronización en Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
