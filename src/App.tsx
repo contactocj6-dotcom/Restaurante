@@ -26,6 +26,7 @@ import {
 import { formatCOP } from './utils/colombiaFiscal';
 import {
   INITIAL_MENU,
+  ANTOJOS_MAR_Y_TIERRA_MENU,
   INITIAL_TABLES,
   INITIAL_COMANDAS,
   INITIAL_VENTAS,
@@ -1721,6 +1722,22 @@ export default function App() {
   const pendingComandasCount = comandas.filter((c) => c.estado === 'Pendiente').length;
   const lowStockCount = menu.filter((item) => item.stockActual <= item.stockMinimo).length;
 
+  const handleLoadOfficialMenu = () => {
+    setMenu(ANTOJOS_MAR_Y_TIERRA_MENU);
+    localStorage.setItem('restoflow_menu', JSON.stringify(ANTOJOS_MAR_Y_TIERRA_MENU));
+    recordAuditLog({
+      accion: 'Carta oficial de restaurante cargada',
+      categoria: 'menu',
+      detalles: `Se cargó la carta completa de Restaurante Antojos Mar y Tierra: ${ANTOJOS_MAR_Y_TIERRA_MENU.length} platos organizados en 8 secciones oficiales.`,
+    });
+    setActiveToast({
+      id: `toast-${Date.now()}`,
+      title: 'Carta Oficial Cargada',
+      body: `Se cargaron con éxito ${ANTOJOS_MAR_Y_TIERRA_MENU.length} productos organizados de Antojos Mar y Tierra.`,
+      timestamp: new Date().toISOString(),
+    });
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-amber-500 selection:text-zinc-950">
       {/* Top Navbar */}
@@ -1964,6 +1981,7 @@ export default function App() {
             }}
             isAdmin={activeStaffUser?.rol === 'Administrador'}
             onRequireAdminAuth={requireAdminAuth}
+            onLoadOfficialMenu={handleLoadOfficialMenu}
           />
         )}
 

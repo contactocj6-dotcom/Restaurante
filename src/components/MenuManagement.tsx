@@ -12,6 +12,7 @@ import {
   Tag,
   AlertTriangle,
   Lock,
+  Sparkles,
 } from 'lucide-react';
 import { formatCOP } from '../utils/colombiaFiscal';
 
@@ -20,6 +21,7 @@ interface MenuManagementProps {
   onAddMenuItem: (item: MenuItem) => void;
   onUpdateMenuItem: (item: MenuItem) => void;
   onToggleAvailability: (itemId: string) => void;
+  onLoadOfficialMenu?: () => void;
   isAdmin?: boolean;
   onRequireAdminAuth?: (action: () => void, title: string) => void;
 }
@@ -29,6 +31,7 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
   onAddMenuItem,
   onUpdateMenuItem,
   onToggleAvailability,
+  onLoadOfficialMenu,
   isAdmin = true,
   onRequireAdminAuth,
 }) => {
@@ -134,6 +137,15 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
     setIsModalOpen(false);
   };
 
+  const handleLoadOfficialMenuClick = () => {
+    if (!onLoadOfficialMenu) return;
+    if (!isAdmin && onRequireAdminAuth) {
+      onRequireAdminAuth(onLoadOfficialMenu, 'Cargar Carta Oficial (Antojos Mar y Tierra)');
+      return;
+    }
+    onLoadOfficialMenu();
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner */}
@@ -164,14 +176,28 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={handleOpenNewItem}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition shadow-md self-start sm:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Agregar Nuevo Plato</span>
-          {!isAdmin && <Lock className="w-3 h-3 text-zinc-900" />}
-        </button>
+        <div className="flex items-center gap-2.5 flex-wrap self-start sm:self-auto">
+          {onLoadOfficialMenu && (
+            <button
+              onClick={handleLoadOfficialMenuClick}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-zinc-800/90 hover:bg-zinc-700/90 text-amber-300 hover:text-amber-200 border border-amber-500/30 text-xs font-semibold transition shadow-sm"
+              title="Cargar o restaurar la carta oficial de 104 productos de Restaurante Antojos Mar y Tierra"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Cargar Carta Oficial (Antojos Mar y Tierra)</span>
+              {!isAdmin && <Lock className="w-3 h-3 text-amber-400/80" />}
+            </button>
+          )}
+
+          <button
+            onClick={handleOpenNewItem}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition shadow-md"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Agregar Nuevo Plato</span>
+            {!isAdmin && <Lock className="w-3 h-3 text-zinc-900" />}
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search */}
