@@ -27,6 +27,7 @@ interface SheetsSyncManagerProps {
   onConnectExistingSheet: (idOrUrl: string) => Promise<void>;
   onCreateNewSheet: () => Promise<void>;
   onSyncAll: () => Promise<void>;
+  onOpenDomainHelp?: () => void;
   counts: {
     menu: number;
     tables: number;
@@ -53,6 +54,7 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
   onConnectExistingSheet,
   onCreateNewSheet,
   onSyncAll,
+  onOpenDomainHelp,
   counts,
 }) => {
   const [manualInput, setManualInput] = useState('');
@@ -132,22 +134,46 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
           </div>
         </div>
 
-        {isSheetsConnected && (
-          <button
-            onClick={onSyncAll}
-            disabled={isSyncing}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-md disabled:opacity-50 self-start sm:self-auto"
-          >
-            <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Todas las Hojas'}</span>
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {onOpenDomainHelp && (
+            <button
+              type="button"
+              onClick={onOpenDomainHelp}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-300 text-xs font-semibold border border-amber-500/30 transition shadow-sm"
+              title="Guía de autorización para dominios Netlify en Firebase"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
+              <span>Configurar Dominio Netlify</span>
+            </button>
+          )}
+
+          {isSheetsConnected && (
+            <button
+              onClick={onSyncAll}
+              disabled={isSyncing}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition shadow-md disabled:opacity-50 self-start sm:self-auto"
+            >
+              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{isSyncing ? 'Sincronizando...' : 'Sincronizar Todas las Hojas'}</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {errorMsg && (
-        <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-800/80 text-rose-300 text-xs flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
-          <span>{errorMsg}</span>
+        <div className="p-4 rounded-2xl bg-rose-950/40 border border-rose-800/80 text-rose-300 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-5 h-5 shrink-0 text-rose-400" />
+            <span>{errorMsg}</span>
+          </div>
+          {onOpenDomainHelp && errorMsg.includes('unauthorized-domain') && (
+            <button
+              onClick={onOpenDomainHelp}
+              className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shrink-0 transition"
+            >
+              Ver Solución Paso a Paso
+            </button>
+          )}
         </div>
       )}
 
@@ -188,6 +214,19 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
             </svg>
             <span>{isLoggingIn ? 'Iniciando sesión...' : 'Conectar con Google'}</span>
           </button>
+
+          {onOpenDomainHelp && (
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={onOpenDomainHelp}
+                className="text-xs text-amber-400 hover:text-amber-300 underline underline-offset-4 inline-flex items-center gap-1.5 transition"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+                <span>¿Desplegaste en Netlify? Guía para autorizar dominio Firebase</span>
+              </button>
+            </div>
+          )}
         </div>
       ) : isSheetsConnected ? (
         /* Connected State */

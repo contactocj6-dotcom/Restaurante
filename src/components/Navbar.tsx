@@ -19,6 +19,7 @@ import {
   Store,
   Lock,
   KeyRound,
+  RotateCcw,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { StaffUser } from '../types/restaurant';
@@ -59,6 +60,7 @@ interface NavbarProps {
   onOpenStaffLogin?: () => void;
   onOpenStaffManagement?: () => void;
   onLockTerminal?: () => void;
+  onOpenResetData?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -71,6 +73,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeCajeroNombre,
   restaurantName,
   onOpenRestaurantProfile,
+  onOpenResetData,
   activeStaffUser,
   onOpenStaffLogin,
   onOpenStaffManagement,
@@ -191,6 +194,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <Store className="w-3.5 h-3.5 text-amber-400" />
               <span>Mi Restaurante</span>
+            </button>
+          )}
+
+          {/* Reset to Production clean data button */}
+          {onOpenResetData && (
+            <button
+              type="button"
+              onClick={onOpenResetData}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-emerald-500/40 hover:text-emerald-300 transition shadow-sm"
+              title="Puesta a Cero / Iniciar en Modo Producción (Vaciar datos de muestra)"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden xl:inline">Puesta a Cero</span>
             </button>
           )}
           {/* Sheets Status indicator */}

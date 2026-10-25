@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Table, Comanda, Venta, MenuItem, SesionCaja } from '../types/restaurant';
+import { Table, Comanda, Venta, MenuItem, SesionCaja, AuditLogEntry, StaffUser } from '../types/restaurant';
 import {
   Clock,
   RotateCcw,
@@ -30,6 +30,7 @@ import {
   Cell,
 } from 'recharts';
 import { CajaResumen } from './CajaResumen';
+import { DashboardAuditLog } from './DashboardAuditLog';
 import { formatCOP, formatCOPCompact } from '../utils/colombiaFiscal';
 
 interface KpiDashboardProps {
@@ -38,6 +39,8 @@ interface KpiDashboardProps {
   ventas: Venta[];
   menu: MenuItem[];
   activeSesionCaja?: SesionCaja | null;
+  auditLogs?: AuditLogEntry[];
+  staffUsers?: StaffUser[];
   onOpenCashModal?: () => void;
   onNavigateToVentas?: () => void;
 }
@@ -48,6 +51,8 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
   ventas,
   menu,
   activeSesionCaja,
+  auditLogs = [],
+  staffUsers = [],
   onOpenCashModal,
   onNavigateToVentas,
 }) => {
@@ -867,6 +872,9 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
           </table>
         </div>
       </div>
+
+      {/* Real-time Detailed User Action Audit Log */}
+      <DashboardAuditLog auditLogs={auditLogs} staffUsers={staffUsers} />
     </div>
   );
 };

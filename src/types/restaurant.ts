@@ -64,6 +64,13 @@ export interface ComandaItem {
 
 export type StaffRole = 'Administrador' | 'Cajero' | 'Mesero' | 'Cocina';
 
+export type AuditActionCategory =
+  | 'comandas'
+  | 'caja'
+  | 'menu'
+  | 'ventas'
+  | 'administracion';
+
 export interface AuditLogEntry {
   id: string;
   fecha: string;
@@ -71,7 +78,11 @@ export interface AuditLogEntry {
   usuarioNombre: string;
   rol: StaffRole;
   accion: string;
+  categoria?: AuditActionCategory;
   detalles?: string;
+  mesaNumero?: number;
+  comandaId?: string;
+  monto?: number;
 }
 
 export interface StaffUser {

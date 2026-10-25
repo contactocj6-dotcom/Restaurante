@@ -218,12 +218,12 @@ export const StaffLoginModal: React.FC<StaffLoginModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Helper PIN badge for quick dev/demo testing */}
+                      {/* Security Lock indicator (PIN is secret) */}
                       <span
-                        className="text-[10px] font-mono px-2 py-1 rounded-lg bg-zinc-800/90 text-zinc-400 border border-zinc-700/60 shrink-0"
-                        title={`PIN predeterminado: ${u.pin}`}
+                        className="text-[10px] flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-800/90 text-zinc-400 border border-zinc-700/60 shrink-0 font-medium"
                       >
-                        PIN: {u.pin}
+                        <Lock className="w-2.5 h-2.5 text-zinc-500" />
+                        <span>••••</span>
                       </span>
                     </button>
                   );
@@ -324,12 +324,10 @@ export const StaffLoginModal: React.FC<StaffLoginModalProps> = ({
         </div>
 
         {/* Footer info banner */}
-        <div className="px-6 py-3 border-t border-zinc-800 bg-zinc-950/80 flex items-center justify-between text-[11px] text-zinc-400">
+        <div className="px-6 py-3 border-t border-zinc-800 bg-zinc-950/80 flex flex-col sm:flex-row items-center justify-between text-[11px] text-zinc-400 gap-2">
           <div className="flex items-center gap-1.5">
-            <Lock className="w-3.5 h-3.5 text-amber-400" />
-            <span>
-              Cada acción (creación de comanda, cambio a cocina, cobro) queda registrada con el nombre del usuario activo.
-            </span>
+            <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span>Acceso protegido por PIN.</span>
           </div>
 
           {!isLockScreen && activeUser && (

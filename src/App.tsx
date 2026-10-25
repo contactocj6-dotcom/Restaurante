@@ -21,6 +21,7 @@ import {
   StaffUser,
   StaffRole,
   AuditLogEntry,
+  AuditActionCategory,
 } from './types/restaurant';
 import { formatCOP } from './utils/colombiaFiscal';
 import {
@@ -37,6 +38,7 @@ import {
   INITIAL_SESIONES_CAJA,
   INITIAL_MOVIMIENTOS_CAJA,
   INITIAL_STAFF_USERS,
+  INITIAL_AUDIT_LOGS,
 } from './data/initialData';
 import {
   initAuth,
@@ -77,6 +79,9 @@ import { CashierManagementModal } from './components/CashierManagementModal';
 import { RestaurantProfileModal } from './components/RestaurantProfileModal';
 import { StaffLoginModal } from './components/StaffLoginModal';
 import { StaffManagementModal } from './components/StaffManagementModal';
+import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
+import { ResetDataModal } from './components/ResetDataModal';
+import { AdminPinVerificationModal } from './components/AdminPinVerificationModal';
 import {
   DianCompanyInfo,
   getSavedRestaurantInfo,
@@ -116,7 +121,76 @@ export default function App() {
 
   const [isStaffLoginOpen, setIsStaffLoginOpen] = useState(false);
   const [isStaffManagementOpen, setIsStaffManagementOpen] = useState(false);
-  const [isTerminalLocked, setIsTerminalLocked] = useState(false);
+  const [isTerminalLocked, setIsTerminalLocked] = useState<boolean>(() => {
+    // Require PIN login when accessing the app via URL on fresh browser session
+    const unlocked = sessionStorage.getItem('restoflow_session_unlocked');
+    return unlocked !== 'true';
+  });
+  const [isUnauthorizedDomainOpen, setIsUnauthorizedDomainOpen] = useState(false);
+  const [isResetDataModalOpen, setIsResetDataModalOpen] = useState(false);
+
+  // Admin PIN Authorization modal for sensitive actions
+  const [adminAuthModal, setAdminAuthModal] = useState<{
+    isOpen: boolean;
+    actionTitle: string;
+    onSuccess: () => void;
+  }>({
+    isOpen: false,
+    actionTitle: '',
+    onSuccess: () => {},
+  });
+
+  // Require Admin verification helper
+  const requireAdminAuth = (action: () => void, actionTitle: string) => {
+    if (activeStaffUser?.rol === 'Administrador') {
+      action();
+    } else {
+      setAdminAuthModal({
+        isOpen: true,
+        actionTitle,
+        onSuccess: action,
+      });
+    }
+  };
+
+  // Detailed Audit Logs State
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(() => {
+    const saved = localStorage.getItem('restoflow_audit_logs');
+    return saved ? JSON.parse(saved) : INITIAL_AUDIT_LOGS;
+  });
+
+  // Record Audit Log Helper
+  const recordAuditLog = useCallback(
+    (entry: {
+      accion: string;
+      categoria?: AuditActionCategory;
+      detalles?: string;
+      usuarioId?: string;
+      usuarioNombre?: string;
+      rol?: StaffRole;
+      mesaNumero?: number;
+      comandaId?: string;
+      monto?: number;
+    }) => {
+      const actor = activeStaffUser;
+      const newEntry: AuditLogEntry = {
+        id: `LOG-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        fecha: new Date().toISOString(),
+        usuarioId: entry.usuarioId || actor?.id || 'USR-001',
+        usuarioNombre: entry.usuarioNombre || actor?.nombre || 'Usuario',
+        rol: entry.rol || actor?.rol || 'Administrador',
+        accion: entry.accion,
+        categoria: entry.categoria || 'comandas',
+        detalles: entry.detalles,
+        mesaNumero: entry.mesaNumero,
+        comandaId: entry.comandaId,
+        monto: entry.monto,
+      };
+
+      setAuditLogs((prev) => [newEntry, ...prev.slice(0, 199)]);
+    },
+    [activeStaffUser]
+  );
 
   // Restaurant State (Memory / Cached)
   const [menu, setMenu] = useState<MenuItem[]>(() => {
@@ -297,6 +371,9 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('restoflow_movimientos_caja', JSON.stringify(movimientosCaja));
   }, [movimientosCaja]);
+  useEffect(() => {
+    localStorage.setItem('restoflow_audit_logs', JSON.stringify(auditLogs));
+  }, [auditLogs]);
 
   // Auth Listener
   useEffect(() => {
@@ -340,7 +417,27 @@ export default function App() {
       }
     } catch (err: any) {
       console.error('Login error:', err);
-      alert(`Error al iniciar sesión: ${err.message || err}`);
+      const errMsg = String(err?.message || err || '');
+      const errCode = String(err?.code || '');
+      if (
+        errCode === 'auth/unauthorized-domain' ||
+        errMsg.includes('auth/unauthorized-domain') ||
+        errMsg.includes('unauthorized-domain')
+      ) {
+        setIsUnauthorizedDomainOpen(true);
+      } else if (
+        errCode === 'auth/popup-closed-by-user' ||
+        errMsg.includes('popup-closed-by-user')
+      ) {
+        // User voluntarily closed popup
+      } else {
+        setActiveToast({
+          id: Date.now().toString(),
+          title: 'Error de Autenticación',
+          body: errMsg || 'No se pudo completar el inicio de sesión con Google.',
+          timestamp: new Date().toLocaleTimeString(),
+        });
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -391,7 +488,12 @@ export default function App() {
   const handleSyncAllToSheets = async () => {
     const token = await getAccessToken();
     if (!token || !spreadsheetId) {
-      alert('Debes conectar una hoja de cálculo con Google primero.');
+      setActiveToast({
+        id: Date.now().toString(),
+        title: 'Google Sheets no conectado',
+        body: 'Debes conectar una hoja de cálculo con Google primero.',
+        timestamp: new Date().toLocaleTimeString(),
+      });
       return;
     }
 
@@ -467,13 +569,155 @@ export default function App() {
           audioService.playSuccessTone();
         } catch (err: any) {
           console.error('Error syncing all:', err);
-          alert(`Error al sincronizar: ${err.message || err}`);
+          setActiveToast({
+            id: Date.now().toString(),
+            title: 'Error al Sincronizar',
+            body: `No se pudo sincronizar: ${err.message || err}`,
+            timestamp: new Date().toLocaleTimeString(),
+          });
         } finally {
           setIsSyncing(false);
           setConfirmModalConfig((c) => ({ ...c, isOpen: false }));
         }
       },
     });
+  };
+
+  // Reset system to clean production mode
+  const handleResetToProduction = ({ clearMenu, keepStaff }: { clearMenu: boolean; keepStaff: boolean }) => {
+    // 1. Reset Tables to 12 free tables
+    const cleanTables: Table[] = Array.from({ length: 12 }, (_, i) => ({
+      id: `TAB-${String(i + 1).padStart(3, '0')}`,
+      numero: i + 1,
+      estado: 'Libre' as TableStatus,
+      capacidad: i < 4 ? 2 : i < 9 ? 4 : i < 11 ? 6 : 8,
+    }));
+    setTables(cleanTables);
+    localStorage.setItem('restoflow_tables', JSON.stringify(cleanTables));
+
+    // 2. Empty Comandas
+    setComandas([]);
+    localStorage.setItem('restoflow_comandas', JSON.stringify([]));
+
+    // 3. Empty Sales & Invoices
+    setVentas([]);
+    localStorage.setItem('restoflow_ventas', JSON.stringify([]));
+    setFacturas([]);
+    localStorage.setItem('restoflow_facturas', JSON.stringify([]));
+
+    // 4. Empty Reservations
+    setReservas([]);
+    localStorage.setItem('restoflow_reservas', JSON.stringify([]));
+
+    // 5. Empty Inventory Purchases & Suppliers & Customers
+    setCompras([]);
+    localStorage.setItem('restoflow_compras', JSON.stringify([]));
+    setProveedores([]);
+    localStorage.setItem('restoflow_proveedores', JSON.stringify([]));
+    setClientes([]);
+    localStorage.setItem('restoflow_clientes', JSON.stringify([]));
+
+    // 6. Reset Cash Register
+    setMovimientosCaja([]);
+    localStorage.setItem('restoflow_movimientos_caja', JSON.stringify([]));
+    setHistorialSesiones([]);
+    localStorage.setItem('restoflow_historial_sesiones', JSON.stringify([]));
+    setActiveSesionCaja(null);
+    localStorage.removeItem('restoflow_active_sesion_caja');
+
+    // 7. Menu handling
+    if (clearMenu) {
+      setMenu([]);
+      localStorage.setItem('restoflow_menu', JSON.stringify([]));
+    }
+
+    // 8. Staff handling
+    if (!keepStaff) {
+      setStaffUsers(INITIAL_STAFF_USERS);
+      localStorage.setItem('restoflow_staff_users', JSON.stringify(INITIAL_STAFF_USERS));
+    }
+
+    const resetAuditLog: AuditLogEntry = {
+      id: `LOG-${Date.now()}`,
+      fecha: new Date().toISOString(),
+      usuarioId: activeStaffUser?.id || 'USR-001',
+      usuarioNombre: activeStaffUser?.nombre || 'Administrador',
+      rol: (activeStaffUser?.rol || 'Administrador') as StaffRole,
+      accion: 'Puesta a Cero / Modo Producción Activado',
+      categoria: 'administracion',
+      detalles: 'Sistema reiniciado en limpio para inicio de operaciones reales en vivo.',
+    };
+    setAuditLogs([resetAuditLog]);
+    localStorage.setItem('restoflow_audit_logs', JSON.stringify([resetAuditLog]));
+
+    localStorage.setItem('restoflow_production_mode', 'true');
+
+    setActiveToast({
+      id: Date.now().toString(),
+      title: '¡Modo Producción Activado!',
+      body: 'Datos de prueba eliminados. Mesas libres, caja en cero y comandas vacías para operar en vivo.',
+      timestamp: new Date().toLocaleTimeString(),
+    });
+    audioService.playSuccessTone();
+  };
+
+  // Restore sample demo data
+  const handleRestoreDemoData = () => {
+    setMenu(INITIAL_MENU);
+    localStorage.setItem('restoflow_menu', JSON.stringify(INITIAL_MENU));
+
+    setTables(INITIAL_TABLES);
+    localStorage.setItem('restoflow_tables', JSON.stringify(INITIAL_TABLES));
+
+    setComandas(INITIAL_COMANDAS);
+    localStorage.setItem('restoflow_comandas', JSON.stringify(INITIAL_COMANDAS));
+
+    setVentas(INITIAL_VENTAS);
+    localStorage.setItem('restoflow_ventas', JSON.stringify(INITIAL_VENTAS));
+
+    setCompras(INITIAL_COMPRAS);
+    localStorage.setItem('restoflow_compras', JSON.stringify(INITIAL_COMPRAS));
+
+    setProveedores(INITIAL_PROVEEDORES);
+    localStorage.setItem('restoflow_proveedores', JSON.stringify(INITIAL_PROVEEDORES));
+
+    setClientes(INITIAL_CLIENTES);
+    localStorage.setItem('restoflow_clientes', JSON.stringify(INITIAL_CLIENTES));
+
+    setFacturas(INITIAL_FACTURAS);
+    localStorage.setItem('restoflow_facturas', JSON.stringify(INITIAL_FACTURAS));
+
+    setReservas(INITIAL_RESERVAS);
+    localStorage.setItem('restoflow_reservas', JSON.stringify(INITIAL_RESERVAS));
+
+    setCajeros(INITIAL_CAJEROS);
+    localStorage.setItem('restoflow_cajeros', JSON.stringify(INITIAL_CAJEROS));
+
+    setActiveSesionCaja(INITIAL_SESIONES_CAJA[0] || null);
+    if (INITIAL_SESIONES_CAJA[0]) {
+      localStorage.setItem('restoflow_active_sesion_caja', JSON.stringify(INITIAL_SESIONES_CAJA[0]));
+    }
+    setHistorialSesiones(INITIAL_SESIONES_CAJA);
+    localStorage.setItem('restoflow_historial_sesiones', JSON.stringify(INITIAL_SESIONES_CAJA));
+
+    setMovimientosCaja(INITIAL_MOVIMIENTOS_CAJA);
+    localStorage.setItem('restoflow_movimientos_caja', JSON.stringify(INITIAL_MOVIMIENTOS_CAJA));
+
+    setStaffUsers(INITIAL_STAFF_USERS);
+    localStorage.setItem('restoflow_staff_users', JSON.stringify(INITIAL_STAFF_USERS));
+
+    setAuditLogs(INITIAL_AUDIT_LOGS);
+    localStorage.setItem('restoflow_audit_logs', JSON.stringify(INITIAL_AUDIT_LOGS));
+
+    localStorage.removeItem('restoflow_production_mode');
+
+    setActiveToast({
+      id: Date.now().toString(),
+      title: 'Datos Demo Restaurados',
+      body: 'Se recargaron los platos, mesas y comandas de muestra.',
+      timestamp: new Date().toLocaleTimeString(),
+    });
+    audioService.playSuccessTone();
   };
 
   // Create brand new sheet in Google Drive
@@ -557,8 +801,24 @@ export default function App() {
       usuarioNombre: actor?.nombre || meseroNombre,
       rol: (actor?.rol || 'Mesero') as StaffRole,
       accion: isEdit ? 'Comanda modificada / productos actualizados' : 'Comanda creada y enviada a cocina',
-      detalles: `Mesa #${comandaData.mesaNumero} • ${comandaData.listaItems.length} productos • Total: $${comandaData.total}`,
+      categoria: 'comandas',
+      detalles: `Mesa #${comandaData.mesaNumero} • ${comandaData.listaItems.length} productos • Total: ${formatCOP(comandaData.total)}`,
+      mesaNumero: comandaData.mesaNumero,
+      comandaId: comandaData.idComanda,
+      monto: comandaData.total,
     };
+
+    recordAuditLog({
+      accion: isEdit ? 'Comanda modificada / productos actualizados' : 'Comanda creada y enviada a cocina',
+      categoria: 'comandas',
+      detalles: `Mesa #${comandaData.mesaNumero} • ${comandaData.listaItems.length} productos • Total: ${formatCOP(comandaData.total)}`,
+      mesaNumero: comandaData.mesaNumero,
+      comandaId: comandaData.idComanda,
+      monto: comandaData.total,
+      usuarioId: actor?.id || meseroId,
+      usuarioNombre: actor?.nombre || meseroNombre,
+      rol: (actor?.rol || 'Mesero') as StaffRole,
+    });
 
     const newComanda: Comanda = {
       ...comandaData,
@@ -665,6 +925,18 @@ export default function App() {
   ) => {
     const acting = cookUser || activeStaffUser;
     const nowIso = new Date().toISOString();
+    const targetComanda = comandas.find((c) => c.idComanda === comandaId);
+
+    recordAuditLog({
+      accion: `Comanda cambiada a estado "${newStatus}"`,
+      categoria: 'comandas',
+      detalles: `Comanda ${comandaId} • Mesa #${targetComanda?.mesaNumero || ''} • Por ${acting?.nombre || 'Cocina'} (${acting?.rol || 'Cocina'})`,
+      comandaId,
+      mesaNumero: targetComanda?.mesaNumero,
+      usuarioId: acting?.id,
+      usuarioNombre: acting?.nombre,
+      rol: acting?.rol as StaffRole,
+    });
 
     setComandas((prev) =>
       prev.map((c) => {
@@ -1046,6 +1318,17 @@ export default function App() {
     };
     setFacturas((prev) => [newFactura, ...prev]);
 
+    recordAuditLog({
+      accion: `Cobro y Factura Emitida (${paymentData.idFactura})`,
+      categoria: 'ventas',
+      detalles: `Comanda ${paymentData.idComanda} • Monto: ${formatCOP(paymentData.monto)} • Pago: ${paymentData.metodoPago} • Cajero: ${targetCajeroNombre}`,
+      comandaId: paymentData.idComanda,
+      monto: paymentData.monto,
+      usuarioId: activeStaffUser?.id || targetCajeroId,
+      usuarioNombre: activeStaffUser?.nombre || targetCajeroNombre,
+      rol: (activeStaffUser?.rol || 'Cajero') as StaffRole,
+    });
+
     // 3. Update Active Cash Register Session & Register Cash Movement
     if (activeSesionCaja && activeSesionCaja.estado === 'Abierta') {
       const isCash = paymentData.metodoPago === 'Efectivo';
@@ -1172,6 +1455,16 @@ export default function App() {
     setActiveCajeroId(openData.cajeroId);
     setMovimientosCaja((prev) => [initialMovement, ...prev]);
 
+    recordAuditLog({
+      accion: 'Apertura de Turno de Caja',
+      categoria: 'caja',
+      detalles: `Turno ${openData.turno} • Cajero: ${openData.cajeroNombre} • Fondo base: ${formatCOP(openData.montoBase)}`,
+      monto: openData.montoBase,
+      usuarioId: activeStaffUser?.id || openData.cajeroId,
+      usuarioNombre: activeStaffUser?.nombre || openData.cajeroNombre,
+      rol: (activeStaffUser?.rol || 'Cajero') as StaffRole,
+    });
+
     audioService.playSuccessTone();
 
     setActiveToast({
@@ -1214,6 +1507,16 @@ export default function App() {
         : closingData.diferencia > 0
         ? `Sobrante de +${formatCOP(closingData.diferencia)}`
         : `Faltante de ${formatCOP(closingData.diferencia)}`;
+
+    recordAuditLog({
+      accion: 'Cierre de Caja Z - Fin de Turno',
+      categoria: 'caja',
+      detalles: `Sesión ${closedSesion.id} • Cajero: ${closedSesion.cajeroNombre} • Efectivo real: ${formatCOP(closingData.efectivoReal)} • Balance: ${diffText}`,
+      monto: closingData.efectivoReal,
+      usuarioId: activeStaffUser?.id || closedSesion.cajeroId,
+      usuarioNombre: activeStaffUser?.nombre || closedSesion.cajeroNombre,
+      rol: (activeStaffUser?.rol || 'Cajero') as StaffRole,
+    });
 
     setActiveToast({
       id: `toast-${Date.now()}`,
@@ -1335,8 +1638,18 @@ export default function App() {
   const handleSelectStaffUser = (user: StaffUser) => {
     setActiveStaffUser(user);
     localStorage.setItem('restoflow_active_staff_user_id', user.id);
+    sessionStorage.setItem('restoflow_session_unlocked', 'true');
     setIsTerminalLocked(false);
     setIsStaffLoginOpen(false);
+
+    recordAuditLog({
+      accion: 'Inicio de turno / Terminal desbloqueada',
+      categoria: 'administracion',
+      detalles: `Usuario ${user.nombre} (${user.rol}) inició sesión con PIN`,
+      usuarioId: user.id,
+      usuarioNombre: user.nombre,
+      rol: user.rol,
+    });
 
     // If cashier, also sync with active cashier for caja and facturación
     if (user.rol === 'Cajero') {
@@ -1426,11 +1739,30 @@ export default function App() {
         cajaAbierta={!!(activeSesionCaja && activeSesionCaja.estado === 'Abierta')}
         activeCajeroNombre={activeCajero?.nombre}
         restaurantName={restaurantInfo.nombreComercial}
-        onOpenRestaurantProfile={() => setIsRestaurantProfileOpen(true)}
+        onOpenRestaurantProfile={() =>
+          requireAdminAuth(
+            () => setIsRestaurantProfileOpen(true),
+            'Configuración General y Fiscal del Restaurante'
+          )
+        }
+        onOpenResetData={() =>
+          requireAdminAuth(
+            () => setIsResetDataModalOpen(true),
+            'Puesta a Cero y Reinicio del Sistema'
+          )
+        }
         activeStaffUser={activeStaffUser}
         onOpenStaffLogin={() => setIsStaffLoginOpen(true)}
-        onOpenStaffManagement={() => setIsStaffManagementOpen(true)}
-        onLockTerminal={() => setIsTerminalLocked(true)}
+        onOpenStaffManagement={() =>
+          requireAdminAuth(
+            () => setIsStaffManagementOpen(true),
+            'Gestión de Personal, Creación de Usuarios y PINs'
+          )
+        }
+        onLockTerminal={() => {
+          sessionStorage.removeItem('restoflow_session_unlocked');
+          setIsTerminalLocked(true);
+        }}
         soundEnabled={soundEnabled}
         onToggleSound={handleToggleSound}
         user={user}
@@ -1478,6 +1810,8 @@ export default function App() {
             ventas={ventas}
             menu={menu}
             activeSesionCaja={activeSesionCaja}
+            auditLogs={auditLogs}
+            staffUsers={staffUsers}
             onOpenCashModal={() => setIsOpenCashModalOpen(true)}
             onNavigateToVentas={() => setActiveTab('ventas')}
           />
@@ -1599,15 +1933,37 @@ export default function App() {
         {activeTab === 'menu' && (
           <MenuManagement
             menu={menu}
-            onAddMenuItem={(item) => setMenu((prev) => [...prev, item])}
-            onUpdateMenuItem={(item) =>
-              setMenu((prev) => prev.map((m) => (m.id === item.id ? item : m)))
-            }
-            onToggleAvailability={(id) =>
+            onAddMenuItem={(item) => {
+              setMenu((prev) => [...prev, item]);
+              recordAuditLog({
+                accion: 'Nuevo plato agregado al menú',
+                categoria: 'menu',
+                detalles: `Plato "${item.nombre}" (${item.categoria}) • Precio: ${formatCOP(item.precio)} • Stock inicial: ${item.stockActual} uds`,
+                monto: item.precio,
+              });
+            }}
+            onUpdateMenuItem={(item) => {
+              setMenu((prev) => prev.map((m) => (m.id === item.id ? item : m)));
+              recordAuditLog({
+                accion: 'Plato del menú modificado',
+                categoria: 'menu',
+                detalles: `Plato "${item.nombre}" • Precio: ${formatCOP(item.precio)} • Stock: ${item.stockActual} uds`,
+                monto: item.precio,
+              });
+            }}
+            onToggleAvailability={(id) => {
+              const dish = menu.find((m) => m.id === id);
               setMenu((prev) =>
                 prev.map((m) => (m.id === id ? { ...m, disponible: !m.disponible } : m))
-              )
-            }
+              );
+              recordAuditLog({
+                accion: 'Disponibilidad de plato cambiada',
+                categoria: 'menu',
+                detalles: `Plato "${dish?.nombre || id}" marcado como ${!dish?.disponible ? 'Disponible' : 'Agotado'}`,
+              });
+            }}
+            isAdmin={activeStaffUser?.rol === 'Administrador'}
+            onRequireAdminAuth={requireAdminAuth}
           />
         )}
 
@@ -1666,6 +2022,7 @@ export default function App() {
               facturas: facturas.length,
               reservas: reservas.length,
             }}
+            onOpenDomainHelp={() => setIsUnauthorizedDomainOpen(true)}
           />
         )}
       </main>
@@ -1771,6 +2128,12 @@ export default function App() {
         isOpen={isRestaurantProfileOpen}
         onClose={() => setIsRestaurantProfileOpen(false)}
         currentInfo={restaurantInfo}
+        onOpenResetData={() =>
+          requireAdminAuth(
+            () => setIsResetDataModalOpen(true),
+            'Puesta a Cero y Reinicio del Sistema'
+          )
+        }
         onSave={(updated) => {
           setRestaurantInfo(updated);
           saveRestaurantInfo(updated);
@@ -1809,6 +2172,36 @@ export default function App() {
         isDestructive={confirmModalConfig.isDestructive}
         onConfirm={confirmModalConfig.action}
         onCancel={() => setConfirmModalConfig((c) => ({ ...c, isOpen: false }))}
+      />
+
+      {/* Firebase Unauthorized Domain Configuration Help Modal */}
+      <UnauthorizedDomainModal
+        isOpen={isUnauthorizedDomainOpen}
+        onClose={() => setIsUnauthorizedDomainOpen(false)}
+        onRetry={handleLogin}
+      />
+
+      {/* Production Reset / Clean Start Data Modal */}
+      <ResetDataModal
+        isOpen={isResetDataModalOpen}
+        onClose={() => setIsResetDataModalOpen(false)}
+        onResetToProduction={handleResetToProduction}
+        onRestoreDemoData={handleRestoreDemoData}
+        currentCounts={{
+          comandas: comandas.length,
+          ventas: ventas.length,
+          menu: menu.length,
+          reservas: reservas.length,
+        }}
+      />
+
+      {/* Admin Authorization Prompt Modal */}
+      <AdminPinVerificationModal
+        isOpen={adminAuthModal.isOpen}
+        onClose={() => setAdminAuthModal((prev) => ({ ...prev, isOpen: false }))}
+        onSuccess={adminAuthModal.onSuccess}
+        actionTitle={adminAuthModal.actionTitle}
+        adminUsers={staffUsers.filter((u) => u.rol === 'Administrador')}
       />
     </div>
   );

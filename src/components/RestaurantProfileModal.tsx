@@ -31,6 +31,7 @@ interface RestaurantProfileModalProps {
   onClose: () => void;
   currentInfo: DianCompanyInfo;
   onSave: (updatedInfo: DianCompanyInfo) => void;
+  onOpenResetData?: () => void;
 }
 
 export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
@@ -38,6 +39,7 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
   onClose,
   currentInfo,
   onSave,
+  onOpenResetData,
 }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'ubicacion' | 'redes' | 'dian' | 'preview'>('general');
   const [formData, setFormData] = useState<DianCompanyInfo>({ ...currentInfo });
@@ -790,14 +792,30 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
 
           {/* Footer Actions */}
           <div className="p-4 px-6 border-t border-zinc-800 bg-zinc-950 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={handleResetDefaults}
-              className="text-xs text-zinc-400 hover:text-rose-400 flex items-center gap-1.5 transition order-2 sm:order-1"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>Restablecer valores iniciales</span>
-            </button>
+            <div className="flex items-center gap-4 order-2 sm:order-1 flex-wrap">
+              <button
+                type="button"
+                onClick={handleResetDefaults}
+                className="text-xs text-zinc-400 hover:text-amber-400 flex items-center gap-1.5 transition"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Restablecer datos DIAN</span>
+              </button>
+
+              {onOpenResetData && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenResetData();
+                  }}
+                  className="text-xs text-emerald-400 hover:text-emerald-300 font-bold flex items-center gap-1.5 transition px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Puesta a Cero / Iniciar en Blanco</span>
+                </button>
+              )}
+            </div>
 
             <div className="flex items-center gap-3 w-full sm:w-auto order-1 sm:order-2">
               <button
