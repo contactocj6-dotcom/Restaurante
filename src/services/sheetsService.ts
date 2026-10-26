@@ -7,6 +7,9 @@ import {
   Proveedor,
   Cliente,
   Factura,
+  Reserva,
+  StaffUser,
+  StaffRole,
 } from '../types/restaurant';
 import {
   INITIAL_MENU,
@@ -17,6 +20,7 @@ import {
   INITIAL_PROVEEDORES,
   INITIAL_CLIENTES,
   INITIAL_FACTURAS,
+  INITIAL_STAFF_USERS,
 } from '../data/initialData';
 
 export const SHEET_NAMES = [
@@ -29,6 +33,7 @@ export const SHEET_NAMES = [
   'Clientes',
   'Facturación',
   'Reservas',
+  'Usuarios',
 ] as const;
 
 export const SHEET_HEADERS: Record<string, string[]> = {
@@ -41,6 +46,7 @@ export const SHEET_HEADERS: Record<string, string[]> = {
   'Clientes': ['ID', 'Nombre', 'Teléfono', 'Email', 'Historial_Pedidos'],
   'Facturación': ['ID_Factura', 'ID_Venta', 'Fecha', 'NIT/ID_Cliente', 'Monto', 'Estado'],
   'Reservas': ['ID', 'ID_Mesa', 'Mesa_Numero', 'Cliente_Nombre', 'Teléfono', 'Fecha', 'Hora', 'Comensales', 'Notas', 'Estado'],
+  'Usuarios': ['ID', 'Nombre', 'Rol', 'PIN', 'Activo', 'Teléfono', 'Email', 'Último_Acceso'],
 };
 
 export function extractSpreadsheetId(input: string): string {
@@ -164,6 +170,26 @@ export async function createRestaurantSpreadsheet(
         ...INITIAL_FACTURAS.map((f) => [f.idFactura, f.idVenta, f.fecha, f.nitCliente, f.monto, f.estado]),
       ],
     },
+    {
+      range: 'Reservas!A1',
+      values: [SHEET_HEADERS['Reservas']],
+    },
+    {
+      range: 'Usuarios!A1',
+      values: [
+        SHEET_HEADERS['Usuarios'],
+        ...INITIAL_STAFF_USERS.map((u) => [
+          u.id,
+          u.nombre,
+          u.rol,
+          u.pin,
+          u.activo ? 'SI' : 'NO',
+          u.telefono || '',
+          u.email || '',
+          u.ultimoAcceso || '',
+        ]),
+      ],
+    },
   ];
 
   await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchUpdate`, {
@@ -196,10 +222,78 @@ export async function getSpreadsheetDetails(token: string, spreadsheetId: string
 }
 
 /**
- * Reads all 8 sheets in one batch request
+ * Ensures all required sheets (including 'Usuarios' and 'Reservas') exist in the spreadsheet.
+ * If any tab is missing, it creates the tab and populates headers.
+ */
+export async function ensureSheetTabsExist(token: string, spreadsheetId: string): Promise<string[]> {
+  try {
+    const metaRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!metaRes.ok) return [...SHEET_NAMES];
+
+    const meta = await metaRes.json();
+    const existingTitles: string[] = (meta.sheets || []).map((s: any) => s.properties?.title);
+
+    const missingSheets = SHEET_NAMES.filter((name) => !existingTitles.includes(name));
+    if (missingSheets.length > 0) {
+      // Create missing sheets in batch
+      const requests = missingSheets.map((title) => ({
+        addSheet: {
+          properties: {
+            title,
+            gridProperties: { frozenRowCount: 1 },
+          },
+        },
+      }));
+
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ requests }),
+      });
+
+      // Write initial headers and data for missing sheets
+      for (const sheetName of missingSheets) {
+        let initialRows: any[][] = [];
+        if (sheetName === 'Usuarios') {
+          initialRows = INITIAL_STAFF_USERS.map((u) => [
+            u.id,
+            u.nombre,
+            u.rol,
+            u.pin,
+            u.activo ? 'SI' : 'NO',
+            u.telefono || '',
+            u.email || '',
+            u.ultimoAcceso || '',
+          ]);
+        }
+        await syncSheetFullRows(token, spreadsheetId, sheetName, initialRows);
+      }
+
+      return [...existingTitles, ...missingSheets];
+    }
+
+    return existingTitles;
+  } catch (err) {
+    console.warn('Error verifying/creating sheet tabs:', err);
+    return [...SHEET_NAMES];
+  }
+}
+
+/**
+ * Reads all restaurant sheets in batch request, including Usuarios and Reservas
  */
 export async function fetchAllSheetsData(token: string, spreadsheetId: string) {
-  const rangesQuery = SHEET_NAMES.map((s) => `ranges=${encodeURIComponent(s)}!A1:Z500`).join('&');
+  // Ensure missing tabs like Usuarios or Reservas exist
+  const existingSheetNames = await ensureSheetTabsExist(token, spreadsheetId);
+
+  const validRanges = SHEET_NAMES.filter((name) => existingSheetNames.includes(name));
+  const rangesQuery = validRanges.map((s) => `ranges=${encodeURIComponent(s)}!A1:Z500`).join('&');
   const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values:batchGet?${rangesQuery}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -312,15 +406,53 @@ export async function fetchAllSheetsData(token: string, spreadsheetId: string) {
     estado: (r[5] as any) || 'Emitida',
   }));
 
+  // 9. Reservas
+  const reservaRows = getSheetValues('Reservas').slice(1);
+  const reservas: Reserva[] = reservaRows.map((r, i) => ({
+    id: r[0] || `RES-${i + 1}`,
+    idMesa: r[1] || '',
+    mesaNumero: parseInt(r[2], 10) || 1,
+    clienteNombre: r[3] || 'Cliente',
+    clienteTelefono: r[4] || '',
+    clienteEmail: undefined,
+    fecha: r[5] || new Date().toISOString().split('T')[0],
+    hora: r[6] || '12:00',
+    comensales: parseInt(r[7], 10) || 2,
+    notas: r[8] || '',
+    estado: (r[9] as any) || 'Confirmada',
+    createdAt: new Date().toISOString(),
+  }));
+
+  // 10. Usuarios (Personal y PINs)
+  const usuarioRows = getSheetValues('Usuarios').slice(1);
+  const staffUsers: StaffUser[] = usuarioRows
+    .filter((r) => r[0] && r[1])
+    .map((r, i) => ({
+      id: r[0] || `USR-${String(i + 1).padStart(3, '0')}`,
+      nombre: r[1] || 'Colaborador',
+      rol: (r[2] as StaffRole) || 'Mesero',
+      pin: String(r[3] || '1234'),
+      activo: String(r[4]).toLowerCase() === 'si' || String(r[4]).toLowerCase() === 'true',
+      telefono: r[5] || undefined,
+      email: r[6] || undefined,
+      ultimoAcceso: r[7] || undefined,
+      avatarColor:
+        INITIAL_STAFF_USERS.find((u) => u.id === r[0])?.avatarColor ||
+        INITIAL_STAFF_USERS[i % INITIAL_STAFF_USERS.length]?.avatarColor ||
+        'from-amber-500 to-rose-600',
+    }));
+
   return {
     menu: menu.length > 0 ? menu : INITIAL_MENU,
     tables: tables.length > 0 ? tables : INITIAL_TABLES,
-    comandas: comandas.length > 0 ? comandas : INITIAL_COMANDAS,
-    ventas: ventas.length > 0 ? ventas : INITIAL_VENTAS,
-    compras: compras.length > 0 ? compras : INITIAL_COMPRAS,
+    comandas,
+    ventas,
+    compras,
     proveedores: proveedores.length > 0 ? proveedores : INITIAL_PROVEEDORES,
-    clientes: clientes.length > 0 ? clientes : INITIAL_CLIENTES,
-    facturas: facturas.length > 0 ? facturas : INITIAL_FACTURAS,
+    clientes,
+    facturas,
+    reservas,
+    staffUsers: staffUsers.length > 0 ? staffUsers : INITIAL_STAFF_USERS,
   };
 }
 
@@ -363,18 +495,22 @@ export async function syncSheetFullRows(
   const header = SHEET_HEADERS[sheetName] || [];
   const fullValues = [header, ...rows];
 
-  // Clear existing content first to avoid ghost rows
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z1000:clear`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  });
+  try {
+    // Clear existing content first to avoid ghost rows
+    await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1:Z1000:clear`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+    });
+  } catch (e) {
+    // Ignore clear failure if sheet doesn't exist yet
+  }
 
   // Write updated values
   const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(sheetName)}!A1?valueInputOption=USER_ENTERED`;
-  const res = await fetch(url, {
+  let res = await fetch(url, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -385,9 +521,47 @@ export async function syncSheetFullRows(
     }),
   });
 
+  // If sheet does not exist, create it and retry write
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error?.message || `Error al sincronizar ${sheetName}`);
+    if (err.error?.message?.includes('Unable to parse range') || res.status === 400) {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          requests: [
+            {
+              addSheet: {
+                properties: {
+                  title: sheetName,
+                  gridProperties: { frozenRowCount: 1 },
+                },
+              },
+            },
+          ],
+        }),
+      });
+
+      res = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          values: fullValues,
+        }),
+      });
+    }
+
+    if (!res.ok) {
+      const retryErr = await res.json().catch(() => ({}));
+      throw new Error(retryErr.error?.message || `Error al sincronizar ${sheetName}`);
+    }
   }
+
   return res.json();
 }

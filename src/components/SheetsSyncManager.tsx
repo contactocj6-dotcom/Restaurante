@@ -10,6 +10,9 @@ import {
   ArrowDownUp,
   Table as TableIcon,
   HelpCircle,
+  Share2,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { SHEET_NAMES, SHEET_HEADERS, extractSpreadsheetId } from '../services/sheetsService';
@@ -38,6 +41,7 @@ interface SheetsSyncManagerProps {
     clientes: number;
     facturas: number;
     reservas?: number;
+    staffUsers?: number;
   };
 }
 
@@ -61,6 +65,16 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
   const [isCreating, setIsCreating] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [copiedShareLink, setCopiedShareLink] = useState(false);
+
+  const handleCopyShareLink = () => {
+    if (!spreadsheetId) return;
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const shareUrl = `${origin}?sheet=${spreadsheetId}`;
+    navigator.clipboard.writeText(shareUrl);
+    setCopiedShareLink(true);
+    setTimeout(() => setCopiedShareLink(false), 3000);
+  };
 
   const handleCreate = async () => {
     setErrorMsg(null);
@@ -99,6 +113,7 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
     'Clientes': counts.clientes,
     'Facturación': counts.facturas,
     'Reservas': counts.reservas || 0,
+    'Usuarios': counts.staffUsers || 0,
   };
 
   const currentSheetLink = spreadsheetId
@@ -140,10 +155,10 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
               type="button"
               onClick={onOpenDomainHelp}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-300 text-xs font-semibold border border-amber-500/30 transition shadow-sm"
-              title="Guía de autorización para dominios Netlify en Firebase"
+              title="Guía de solución para Error 403 (access_denied) y dominios Netlify en Google/Firebase"
             >
               <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-              <span>Configurar Dominio Netlify</span>
+              <span>Ayuda Conexión Google & Error 403</span>
             </button>
           )}
 
@@ -238,7 +253,26 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
               <p className="text-xs font-mono text-zinc-400 break-all mt-0.5">ID: {spreadsheetId}</p>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={handleCopyShareLink}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 text-xs font-bold transition flex items-center gap-1.5 border border-emerald-500/30 shadow-sm"
+                title="Copia el enlace para abrir en otros celulares, tablets de meseros o computadores sincronizados automáticamente a esta hoja"
+              >
+                {copiedShareLink ? (
+                  <>
+                    <Check className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>¡Enlace Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Share2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Copiar Enlace Multidispositivo</span>
+                  </>
+                )}
+              </button>
+
               {currentSheetLink && (
                 <a
                   href={currentSheetLink}
@@ -253,12 +287,19 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
             </div>
           </div>
 
+          <div className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-xl text-[11px] text-zinc-400 flex items-start gap-2">
+            <Share2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <span>
+              <strong className="text-zinc-200">Multidispositivo en Tiempo Real:</strong> Comparte el enlace con tus meseros o cajeros. Al abrir la app en otro navegador o celular con ese enlace, se conectará de inmediato a esta hoja de cálculo y cargará los datos reales sin mostrar datos de prueba.
+            </span>
+          </div>
+
           <div className="pt-3 border-t border-zinc-800 flex flex-wrap items-center justify-between text-xs text-zinc-400 gap-2">
             <span>
               Última sincronización: <strong className="text-zinc-200">{lastSyncTime || 'Recién sincronizado'}</strong>
             </span>
             <span className="text-emerald-400 font-medium">
-              ✓ 8 hojas sincronizadas bidireccionalmente
+              ✓ 10 hojas sincronizadas bidireccionalmente
             </span>
           </div>
         </div>
@@ -273,7 +314,7 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
               </div>
               <h3 className="text-base font-bold text-white">Opción 1: Crear Hoja Automática</h3>
               <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                Crea una nueva hoja en tu Google Drive con las 8 pestañas formateadas (Menú, Mesas, Comandas, Ventas, Compras, Proveedores, Clientes, Facturación) con encabezados y datos iniciales listos para operar.
+                Crea una nueva hoja en tu Google Drive con las 10 pestañas formateadas (Menú, Mesas, Comandas, Ventas, Compras, Proveedores, Clientes, Facturación, Reservas y Usuarios) con encabezados y datos iniciales listos para operar.
               </p>
             </div>
 
@@ -319,12 +360,12 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
         </div>
       )}
 
-      {/* 8 Sheets Structure Inspection Table */}
+      {/* 10 Sheets Structure Inspection Table */}
       <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl overflow-hidden shadow-xl">
         <div className="p-4 border-b border-zinc-800 bg-zinc-950/60 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TableIcon className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-sm font-bold text-white">Estructura de las 8 Hojas en Google Sheets</h3>
+            <h3 className="text-sm font-bold text-white">Estructura de las 10 Hojas en Google Sheets</h3>
           </div>
           <span className="text-xs text-zinc-500">Mapeo Exacto Requerido</span>
         </div>

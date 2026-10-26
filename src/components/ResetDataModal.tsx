@@ -12,6 +12,7 @@ import {
   X,
   Check,
   ShieldAlert,
+  Lock,
 } from 'lucide-react';
 
 interface ResetDataModalProps {
@@ -63,12 +64,13 @@ export const ResetDataModal: React.FC<ResetDataModalProps> = ({
               <RotateCcw className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-lg font-black text-white tracking-tight">
                   Puesta a Cero / Modo Producción
                 </h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
-                  En Vivo
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 uppercase tracking-wider flex items-center gap-1">
+                  <Lock className="w-2.5 h-2.5" />
+                  Solo Administrador
                 </span>
               </div>
               <p className="text-xs text-zinc-400 mt-1">

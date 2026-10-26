@@ -19,6 +19,7 @@ import {
   Receipt,
   Eye,
   Save,
+  Lock,
 } from 'lucide-react';
 import {
   DianCompanyInfo,
@@ -32,6 +33,8 @@ interface RestaurantProfileModalProps {
   currentInfo: DianCompanyInfo;
   onSave: (updatedInfo: DianCompanyInfo) => void;
   onOpenResetData?: () => void;
+  isAdmin?: boolean;
+  onRequireAdminAuth?: (action: () => void, title: string) => void;
 }
 
 export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
@@ -40,6 +43,8 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
   currentInfo,
   onSave,
   onOpenResetData,
+  isAdmin = true,
+  onRequireAdminAuth,
 }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'ubicacion' | 'redes' | 'dian' | 'preview'>('general');
   const [formData, setFormData] = useState<DianCompanyInfo>({ ...currentInfo });
@@ -56,6 +61,20 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) {
+      if (onRequireAdminAuth) {
+        onRequireAdminAuth(() => {
+          saveRestaurantInfo(formData);
+          onSave(formData);
+          setShowSavedToast(true);
+          setTimeout(() => {
+            setShowSavedToast(false);
+            onClose();
+          }, 1200);
+        }, 'Modificar Información del Restaurante');
+      }
+      return;
+    }
     saveRestaurantInfo(formData);
     onSave(formData);
     setShowSavedToast(true);
@@ -66,6 +85,7 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
   };
 
   const handleResetDefaults = () => {
+    if (!isAdmin) return;
     if (window.confirm('¿Deseas restaurar la información a los datos sugeridos por defecto de RestoFlow Colombia?')) {
       setFormData({ ...DIAN_COMPANY_INFO });
     }
@@ -88,16 +108,25 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
               </div>
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-lg font-black tracking-tight text-white">
                   Información del Restaurante
                 </h2>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono">
-                  DIAN & POS
-                </span>
+                {isAdmin ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                    Modo Administrador
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" />
+                    Modo Consulta
+                  </span>
+                )}
               </div>
               <p className="text-xs text-zinc-400">
-                Personaliza Nombre, NIT, Dirección, Contactos, Redes Sociales y Parámetros Fiscales
+                {isAdmin
+                  ? 'Personaliza Nombre, NIT, Dirección, Contactos, Redes Sociales y Parámetros Fiscales'
+                  : 'Modo solo lectura. Solo el usuario Administrador puede modificar datos comerciales y fiscales.'}
               </p>
             </div>
           </div>
@@ -110,6 +139,25 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Read-Only Non-Admin Banner */}
+        {!isAdmin && (
+          <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2.5 flex items-center justify-between gap-3 text-xs text-amber-300">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>Modo solo lectura: Solo un usuario con rol de <strong>Administrador</strong> puede modificar la información y facturación del restaurante.</span>
+            </div>
+            {onRequireAdminAuth && (
+              <button
+                type="button"
+                onClick={() => onRequireAdminAuth(() => {}, 'Habilitar Edición de Mi Restaurante')}
+                className="px-2.5 py-1 rounded-lg bg-amber-500 text-zinc-950 font-bold text-[11px] shrink-0 hover:bg-amber-400 transition"
+              >
+                Ingresar PIN Admin
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Saved Toast Feedback */}
         {showSavedToast && (
@@ -190,6 +238,7 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
         {/* Form Body */}
         <form onSubmit={handleSave} className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <fieldset disabled={!isAdmin} className="contents disabled:opacity-75">
 
             {/* TAB 1: DATOS GENERALES */}
             {activeTab === 'general' && (
@@ -788,21 +837,24 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
                 </div>
               </div>
             )}
+            </fieldset>
           </div>
 
           {/* Footer Actions */}
           <div className="p-4 px-6 border-t border-zinc-800 bg-zinc-950 flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-4 order-2 sm:order-1 flex-wrap">
-              <button
-                type="button"
-                onClick={handleResetDefaults}
-                className="text-xs text-zinc-400 hover:text-amber-400 flex items-center gap-1.5 transition"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Restablecer datos DIAN</span>
-              </button>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={handleResetDefaults}
+                  className="text-xs text-zinc-400 hover:text-amber-400 flex items-center gap-1.5 transition"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Restablecer datos DIAN</span>
+                </button>
+              )}
 
-              {onOpenResetData && (
+              {onOpenResetData && isAdmin && (
                 <button
                   type="button"
                   onClick={() => {
@@ -823,15 +875,28 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
                 onClick={onClose}
                 className="flex-1 sm:flex-none px-4 py-2 rounded-xl border border-zinc-700 text-zinc-300 hover:bg-zinc-800 text-xs font-semibold transition"
               >
-                Cancelar
+                {isAdmin ? 'Cancelar' : 'Cerrar'}
               </button>
-              <button
-                type="submit"
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold shadow-lg shadow-amber-500/20 transition"
-              >
-                <Save className="w-4 h-4" />
-                <span>Guardar Cambios</span>
-              </button>
+              {isAdmin ? (
+                <button
+                  type="submit"
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold shadow-lg shadow-amber-500/20 transition"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Guardar Cambios</span>
+                </button>
+              ) : (
+                onRequireAdminAuth && (
+                  <button
+                    type="button"
+                    onClick={() => onRequireAdminAuth(() => {}, 'Modificar Información del Restaurante')}
+                    className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-amber-500/30 text-xs font-bold transition shadow-sm"
+                  >
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Desbloquear Edición (PIN)</span>
+                  </button>
+                )
+              )}
             </div>
           </div>
         </form>

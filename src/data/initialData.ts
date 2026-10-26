@@ -1076,7 +1076,7 @@ export const INITIAL_MENU: MenuItem[] = [
 export const ANTOJOS_MAR_Y_TIERRA_MENU = INITIAL_MENU;
 
 
-export const INITIAL_TABLES: Table[] = [
+export const DEMO_SAMPLE_TABLES: Table[] = [
   { id: 'TAB-001', numero: 1, estado: 'Libre', capacidad: 2 },
   { id: 'TAB-002', numero: 2, estado: 'Ocupada', capacidad: 4, clienteActualId: 'CLI-001', clienteNombre: 'Carlos Méndez', activeComandaId: 'COM-101' },
   { id: 'TAB-003', numero: 3, estado: 'Ocupada', capacidad: 4, clienteActualId: 'CLI-002', clienteNombre: 'María Rodríguez', activeComandaId: 'COM-102' },
@@ -1101,7 +1101,15 @@ export const INITIAL_TABLES: Table[] = [
   { id: 'TAB-012', numero: 12, estado: 'Libre', capacidad: 10 },
 ];
 
-export const INITIAL_COMANDAS: Comanda[] = [
+// Mesas en Modo Producción Real (12 mesas limpias y desocupadas listas para comensales reales)
+export const INITIAL_TABLES: Table[] = Array.from({ length: 12 }, (_, i) => ({
+  id: `TAB-${String(i + 1).padStart(3, '0')}`,
+  numero: i + 1,
+  estado: 'Libre',
+  capacidad: i < 4 ? 2 : i < 9 ? 4 : i < 11 ? 6 : 8,
+}));
+
+export const DEMO_SAMPLE_COMANDAS: Comanda[] = [
   {
     idComanda: 'COM-101',
     idMesa: 'TAB-002',
@@ -1198,7 +1206,10 @@ export const INITIAL_COMANDAS: Comanda[] = [
   },
 ];
 
-export const INITIAL_VENTAS: Venta[] = [
+// Comandas en Modo Producción Real (0 comandas de prueba)
+export const INITIAL_COMANDAS: Comanda[] = [];
+
+export const DEMO_SAMPLE_VENTAS: Venta[] = [
   {
     idVenta: 'VEN-001',
     idComanda: 'COM-098',
@@ -1224,6 +1235,9 @@ export const INITIAL_VENTAS: Venta[] = [
     mesaNumero: 7,
   },
 ];
+
+// Ventas en Modo Producción Real (0 ventas ficticias)
+export const INITIAL_VENTAS: Venta[] = [];
 
 export const INITIAL_PROVEEDORES: Proveedor[] = [
   {
@@ -1314,7 +1328,7 @@ export const INITIAL_CLIENTES: Cliente[] = [
   },
 ];
 
-export const INITIAL_FACTURAS: Factura[] = [
+export const DEMO_SAMPLE_FACTURAS: Factura[] = [
   {
     idFactura: 'FE-001',
     idVenta: 'VEN-001',
@@ -1344,11 +1358,14 @@ export const INITIAL_FACTURAS: Factura[] = [
   },
 ];
 
+// Facturación en Modo Producción Real
+export const INITIAL_FACTURAS: Factura[] = [];
+
 const todayStr = new Date().toISOString().split('T')[0];
 const tomorrowDate = new Date(Date.now() + 86400000);
 const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
 
-export const INITIAL_RESERVAS: Reserva[] = [
+export const DEMO_SAMPLE_RESERVAS: Reserva[] = [
   {
     id: 'RES-001',
     idMesa: 'TAB-005',
@@ -1406,6 +1423,9 @@ export const INITIAL_RESERVAS: Reserva[] = [
   },
 ];
 
+// Reservas en Modo Producción Real (0 reservas activas)
+export const INITIAL_RESERVAS: Reserva[] = [];
+
 export const INITIAL_CAJEROS: Cajero[] = [
   {
     id: 'CAJ-001',
@@ -1450,7 +1470,7 @@ const threeHoursAgoIso = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
 const yesterdayIso = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
 const yesterdayCloseIso = new Date(Date.now() - 16 * 3600 * 1000).toISOString();
 
-export const INITIAL_SESIONES_CAJA: SesionCaja[] = [
+export const DEMO_SAMPLE_SESIONES_CAJA: SesionCaja[] = [
   {
     id: 'SES-002',
     cajeroId: 'CAJ-001',
@@ -1460,12 +1480,12 @@ export const INITIAL_SESIONES_CAJA: SesionCaja[] = [
     montoBase: 200000,
     estado: 'Abierta',
     notasApertura: 'Apertura con fondo base de $ 200.000 COP en billetes y monedas para cambio.',
-    totalVentasEfectivo: 78000,   // VEN-002 ($78.000)
-    totalVentasTarjeta: 168000,  // VEN-001 ($168.000)
-    totalVentasTransferencia: 150000, // VEN-003 ($150.000)
+    totalVentasEfectivo: 78000,
+    totalVentasTarjeta: 168000,
+    totalVentasTransferencia: 150000,
     totalEntradasManuales: 50000,
     totalSalidasManuales: 35000,
-    efectivoEsperado: 293000, // 200.000 + 78.000 + 50.000 - 35.000 = 293.000
+    efectivoEsperado: 293000,
   },
   {
     id: 'SES-001',
@@ -1482,7 +1502,7 @@ export const INITIAL_SESIONES_CAJA: SesionCaja[] = [
     totalVentasTransferencia: 180000,
     totalEntradasManuales: 0,
     totalSalidasManuales: 50000,
-    efectivoEsperado: 790000, // 200.000 + 640.000 - 50.000
+    efectivoEsperado: 790000,
     efectivoReal: 790000,
     diferencia: 0,
     notasCierre: 'Arqueo perfecto en pesos colombianos. Dinero entregado a tesorería.',
@@ -1490,7 +1510,10 @@ export const INITIAL_SESIONES_CAJA: SesionCaja[] = [
   },
 ];
 
-export const INITIAL_MOVIMIENTOS_CAJA: MovimientoCaja[] = [
+// Sesiones de Caja en Modo Producción (Caja lista para que el cajero abra su primer turno real)
+export const INITIAL_SESIONES_CAJA: SesionCaja[] = [];
+
+export const DEMO_SAMPLE_MOVIMIENTOS_CAJA: MovimientoCaja[] = [
   {
     id: 'MOV-001',
     sesionId: 'SES-002',
@@ -1563,6 +1586,9 @@ export const INITIAL_MOVIMIENTOS_CAJA: MovimientoCaja[] = [
     comprobanteRef: 'VEN-003',
   },
 ];
+
+// Movimientos de Caja en Modo Producción (0 movimientos iniciales)
+export const INITIAL_MOVIMIENTOS_CAJA: MovimientoCaja[] = [];
 
 export const INITIAL_STAFF_USERS: StaffUser[] = [
   {

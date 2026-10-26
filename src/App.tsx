@@ -40,6 +40,13 @@ import {
   INITIAL_MOVIMIENTOS_CAJA,
   INITIAL_STAFF_USERS,
   INITIAL_AUDIT_LOGS,
+  DEMO_SAMPLE_TABLES,
+  DEMO_SAMPLE_COMANDAS,
+  DEMO_SAMPLE_VENTAS,
+  DEMO_SAMPLE_FACTURAS,
+  DEMO_SAMPLE_RESERVAS,
+  DEMO_SAMPLE_SESIONES_CAJA,
+  DEMO_SAMPLE_MOVIMIENTOS_CAJA,
 } from './data/initialData';
 import {
   initAuth,
@@ -128,6 +135,7 @@ export default function App() {
     return unlocked !== 'true';
   });
   const [isUnauthorizedDomainOpen, setIsUnauthorizedDomainOpen] = useState(false);
+  const [unauthorizedModalTab, setUnauthorizedModalTab] = useState<'oauth403' | 'domain'>('oauth403');
   const [isResetDataModalOpen, setIsResetDataModalOpen] = useState(false);
 
   // Admin PIN Authorization modal for sensitive actions
@@ -193,50 +201,113 @@ export default function App() {
     [activeStaffUser]
   );
 
-  // Restaurant State (Memory / Cached)
+  // Restaurant State (Memory / Cached in localStorage)
   const [menu, setMenu] = useState<MenuItem[]>(() => {
     const saved = localStorage.getItem('restoflow_menu');
-    return saved ? JSON.parse(saved) : INITIAL_MENU;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return INITIAL_MENU;
+      }
+    }
+    return INITIAL_MENU;
   });
 
   const [tables, setTables] = useState<Table[]>(() => {
     const saved = localStorage.getItem('restoflow_tables');
-    return saved ? JSON.parse(saved) : INITIAL_TABLES;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return INITIAL_TABLES;
+      }
+    }
+    return INITIAL_TABLES;
   });
 
   const [comandas, setComandas] = useState<Comanda[]>(() => {
     const saved = localStorage.getItem('restoflow_comandas');
-    return saved ? JSON.parse(saved) : INITIAL_COMANDAS;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return INITIAL_COMANDAS;
+      }
+    }
+    return INITIAL_COMANDAS;
   });
 
   const [ventas, setVentas] = useState<Venta[]>(() => {
     const saved = localStorage.getItem('restoflow_ventas');
-    return saved ? JSON.parse(saved) : INITIAL_VENTAS;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return INITIAL_VENTAS;
+      }
+    }
+    return INITIAL_VENTAS;
   });
 
   const [compras, setCompras] = useState<Compra[]>(() => {
     const saved = localStorage.getItem('restoflow_compras');
-    return saved ? JSON.parse(saved) : INITIAL_COMPRAS;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return INITIAL_COMPRAS;
+      }
+    }
+    return INITIAL_COMPRAS;
   });
 
   const [proveedores, setProveedores] = useState<Proveedor[]>(() => {
     const saved = localStorage.getItem('restoflow_proveedores');
-    return saved ? JSON.parse(saved) : INITIAL_PROVEEDORES;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return INITIAL_PROVEEDORES;
+      }
+    }
+    return INITIAL_PROVEEDORES;
   });
 
   const [clientes, setClientes] = useState<Cliente[]>(() => {
     const saved = localStorage.getItem('restoflow_clientes');
-    return saved ? JSON.parse(saved) : INITIAL_CLIENTES;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return INITIAL_CLIENTES;
+      }
+    }
+    return INITIAL_CLIENTES;
   });
 
   const [facturas, setFacturas] = useState<Factura[]>(() => {
     const saved = localStorage.getItem('restoflow_facturas');
-    return saved ? JSON.parse(saved) : INITIAL_FACTURAS;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return INITIAL_FACTURAS;
+      }
+    }
+    return INITIAL_FACTURAS;
   });
 
   const [reservas, setReservas] = useState<Reserva[]>(() => {
     const saved = localStorage.getItem('restoflow_reservas');
-    return saved ? JSON.parse(saved) : INITIAL_RESERVAS;
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return INITIAL_RESERVAS;
+      }
+    }
+    return INITIAL_RESERVAS;
   });
 
   // Cajeros y Control de Caja State
@@ -255,15 +326,15 @@ export default function App() {
       try {
         return JSON.parse(saved);
       } catch {
-        return INITIAL_SESIONES_CAJA[0];
+        return null;
       }
     }
-    return INITIAL_SESIONES_CAJA[0];
+    return null;
   });
 
   const [historialSesiones, setHistorialSesiones] = useState<SesionCaja[]>(() => {
     const saved = localStorage.getItem('restoflow_historial_sesiones');
-    return saved ? JSON.parse(saved) : [INITIAL_SESIONES_CAJA[1]];
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [movimientosCaja, setMovimientosCaja] = useState<MovimientoCaja[]>(() => {
@@ -282,8 +353,16 @@ export default function App() {
 
   const activeCajero = cajeros.find((c) => c.id === activeCajeroId) || cajeros[0] || null;
 
-  // Google Sheets Connection State
+  // Google Sheets Connection State (Supports URL sharing across browsers e.g. ?sheet=ID)
   const [spreadsheetId, setSpreadsheetId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const urlSheet = params.get('sheet') || params.get('sheetId');
+      if (urlSheet) {
+        localStorage.setItem('restoflow_sheet_id', urlSheet);
+        return urlSheet;
+      }
+    }
     return localStorage.getItem('restoflow_sheet_id') || '';
   });
   const [spreadsheetTitle, setSpreadsheetTitle] = useState<string>(() => {
@@ -375,14 +454,141 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('restoflow_audit_logs', JSON.stringify(auditLogs));
   }, [auditLogs]);
+  useEffect(() => {
+    localStorage.setItem('restoflow_staff_users', JSON.stringify(staffUsers));
+  }, [staffUsers]);
 
-  // Auth Listener
+  // Sync data from Google Sheets (including Staff Users and Reservas)
+  const handleSyncFromSheets = async (token?: string, sheetId?: string) => {
+    const currentToken = token || (await getAccessToken());
+    const targetSheetId = sheetId || spreadsheetId;
+
+    if (!currentToken || !targetSheetId) return;
+
+    setIsSyncing(true);
+    try {
+      const data = await fetchAllSheetsData(currentToken, targetSheetId);
+      if (data.menu && data.menu.length > 0) {
+        setMenu(data.menu);
+        localStorage.setItem('restoflow_menu', JSON.stringify(data.menu));
+      }
+      if (data.tables && data.tables.length > 0) {
+        setTables(data.tables);
+        localStorage.setItem('restoflow_tables', JSON.stringify(data.tables));
+      }
+      // For operational data: mirror Google Sheets directly (if empty or zeroed, mirrors faithfully)
+      const newComandas = data.comandas || [];
+      setComandas(newComandas);
+      localStorage.setItem('restoflow_comandas', JSON.stringify(newComandas));
+
+      const newVentas = data.ventas || [];
+      setVentas(newVentas);
+      localStorage.setItem('restoflow_ventas', JSON.stringify(newVentas));
+
+      if (data.compras) {
+        setCompras(data.compras);
+        localStorage.setItem('restoflow_compras', JSON.stringify(data.compras));
+      }
+      if (data.proveedores && data.proveedores.length > 0) {
+        setProveedores(data.proveedores);
+        localStorage.setItem('restoflow_proveedores', JSON.stringify(data.proveedores));
+      }
+      if (data.clientes) {
+        setClientes(data.clientes);
+        localStorage.setItem('restoflow_clientes', JSON.stringify(data.clientes));
+      }
+      const newFacturas = data.facturas || [];
+      setFacturas(newFacturas);
+      localStorage.setItem('restoflow_facturas', JSON.stringify(newFacturas));
+
+      if (data.reservas) {
+        setReservas(data.reservas);
+        localStorage.setItem('restoflow_reservas', JSON.stringify(data.reservas));
+      }
+
+      if (data.staffUsers && data.staffUsers.length > 0) {
+        setStaffUsers(data.staffUsers);
+        localStorage.setItem('restoflow_staff_users', JSON.stringify(data.staffUsers));
+      }
+
+      setIsSheetsConnected(true);
+      setLastSyncTime(new Date().toLocaleTimeString());
+    } catch (err: any) {
+      console.error('Failed to sync from sheets:', err);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // One-time initialization check:
+  // If 'restoflow_initialized' is missing in localStorage, load values from Google Sheets (if connected)
+  // or load the initial default values for a single time.
+  // This guarantees that after tables/comandas are set to zero or updated, reloading the page will never overwrite them.
+  useEffect(() => {
+    const initialized = localStorage.getItem('restoflow_initialized');
+    if (!initialized) {
+      const runInitialSetup = async () => {
+        let loadedFromSheets = false;
+        const currentToken = await getAccessToken();
+        const targetSheetId = spreadsheetId || localStorage.getItem('restoflow_sheet_id');
+
+        if (currentToken && targetSheetId) {
+          try {
+            await handleSyncFromSheets(currentToken, targetSheetId);
+            loadedFromSheets = true;
+          } catch (err) {
+            console.warn('Initial load from Sheets failed, falling back to defaults:', err);
+          }
+        }
+
+        if (!loadedFromSheets) {
+          setMenu(INITIAL_MENU);
+          localStorage.setItem('restoflow_menu', JSON.stringify(INITIAL_MENU));
+          setTables(INITIAL_TABLES);
+          localStorage.setItem('restoflow_tables', JSON.stringify(INITIAL_TABLES));
+          setComandas(INITIAL_COMANDAS);
+          localStorage.setItem('restoflow_comandas', JSON.stringify(INITIAL_COMANDAS));
+          setVentas(INITIAL_VENTAS);
+          localStorage.setItem('restoflow_ventas', JSON.stringify(INITIAL_VENTAS));
+          setCompras(INITIAL_COMPRAS);
+          localStorage.setItem('restoflow_compras', JSON.stringify(INITIAL_COMPRAS));
+          setProveedores(INITIAL_PROVEEDORES);
+          localStorage.setItem('restoflow_proveedores', JSON.stringify(INITIAL_PROVEEDORES));
+          setClientes(INITIAL_CLIENTES);
+          localStorage.setItem('restoflow_clientes', JSON.stringify(INITIAL_CLIENTES));
+          setFacturas(INITIAL_FACTURAS);
+          localStorage.setItem('restoflow_facturas', JSON.stringify(INITIAL_FACTURAS));
+          setReservas(INITIAL_RESERVAS);
+          localStorage.setItem('restoflow_reservas', JSON.stringify(INITIAL_RESERVAS));
+          setCajeros(INITIAL_CAJEROS);
+          localStorage.setItem('restoflow_cajeros', JSON.stringify(INITIAL_CAJEROS));
+          setStaffUsers(INITIAL_STAFF_USERS);
+          localStorage.setItem('restoflow_staff_users', JSON.stringify(INITIAL_STAFF_USERS));
+        }
+
+        localStorage.setItem('restoflow_initialized', 'true');
+      };
+
+      runInitialSetup();
+    }
+  }, []);
+
+  // Auth Listener (preserves local state on reload; only hydrates from Sheets on very first run if not initialized)
   useEffect(() => {
     const unsubscribe = initAuth(
-      (currentUser, token) => {
+      async (currentUser, token) => {
         setUser(currentUser);
         if (spreadsheetId && token) {
           setIsSheetsConnected(true);
+          const initialized = localStorage.getItem('restoflow_initialized');
+          if (!initialized) {
+            try {
+              await handleSyncFromSheets(token, spreadsheetId);
+              localStorage.setItem('restoflow_initialized', 'true');
+            } catch (err) {
+              console.warn('Initial load from Sheets via auth:', err);
+            }
+          }
         }
       },
       () => {
@@ -425,6 +631,14 @@ export default function App() {
         errMsg.includes('auth/unauthorized-domain') ||
         errMsg.includes('unauthorized-domain')
       ) {
+        setUnauthorizedModalTab('domain');
+        setIsUnauthorizedDomainOpen(true);
+      } else if (
+        errMsg.includes('403') ||
+        errMsg.includes('access_denied') ||
+        errCode.includes('403')
+      ) {
+        setUnauthorizedModalTab('oauth403');
         setIsUnauthorizedDomainOpen(true);
       } else if (
         errCode === 'auth/popup-closed-by-user' ||
@@ -432,10 +646,11 @@ export default function App() {
       ) {
         // User voluntarily closed popup
       } else {
+        // If unknown error, also allow clicking to open guide
         setActiveToast({
           id: Date.now().toString(),
-          title: 'Error de Autenticación',
-          body: errMsg || 'No se pudo completar el inicio de sesión con Google.',
+          title: 'Error de Autenticación Google',
+          body: errMsg || 'No se pudo completar el inicio de sesión con Google. Haz clic en "Ayuda de Conexión" en Sincronización.',
           timestamp: new Date().toLocaleTimeString(),
         });
       }
@@ -457,34 +672,6 @@ export default function App() {
     setSoundEnabled(newState);
   };
 
-  // Sync data from Google Sheets
-  const handleSyncFromSheets = async (token?: string, sheetId?: string) => {
-    const currentToken = token || (await getAccessToken());
-    const targetSheetId = sheetId || spreadsheetId;
-
-    if (!currentToken || !targetSheetId) return;
-
-    setIsSyncing(true);
-    try {
-      const data = await fetchAllSheetsData(currentToken, targetSheetId);
-      if (data.menu.length > 0) setMenu(data.menu);
-      if (data.tables.length > 0) setTables(data.tables);
-      if (data.comandas.length > 0) setComandas(data.comandas);
-      if (data.ventas.length > 0) setVentas(data.ventas);
-      if (data.compras.length > 0) setCompras(data.compras);
-      if (data.proveedores.length > 0) setProveedores(data.proveedores);
-      if (data.clientes.length > 0) setClientes(data.clientes);
-      if (data.facturas.length > 0) setFacturas(data.facturas);
-
-      setIsSheetsConnected(true);
-      setLastSyncTime(new Date().toLocaleTimeString());
-    } catch (err: any) {
-      console.error('Failed to sync from sheets:', err);
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   // Push all local data to Google Sheets
   const handleSyncAllToSheets = async () => {
     const token = await getAccessToken();
@@ -502,7 +689,7 @@ export default function App() {
       isOpen: true,
       title: 'Sincronizar Todas las Hojas en Google Sheets',
       description:
-        '¿Deseas enviar los datos actuales de Menú, Mesas, Comandas, Ventas, Compras, Proveedores, Clientes y Facturación a tu hoja de Google Sheets?',
+        '¿Deseas enviar los datos actuales de Menú, Mesas, Comandas, Ventas, Compras, Proveedores, Clientes, Facturación, Reservas y Usuarios (con sus PINs) a tu hoja de Google Sheets?',
       confirmLabel: 'Sincronizar Ahora',
       isDestructive: false,
       action: async () => {
@@ -564,6 +751,38 @@ export default function App() {
             spreadsheetId,
             'Facturación',
             facturas.map((f) => [f.idFactura, f.idVenta, f.fecha, f.nitCliente, f.monto, f.estado])
+          );
+          await syncSheetFullRows(
+            token,
+            spreadsheetId,
+            'Reservas',
+            reservas.map((r) => [
+              r.id,
+              r.idMesa,
+              r.mesaNumero,
+              r.clienteNombre,
+              r.clienteTelefono || '',
+              r.fecha,
+              r.hora,
+              r.comensales,
+              r.notas || '',
+              r.estado,
+            ])
+          );
+          await syncSheetFullRows(
+            token,
+            spreadsheetId,
+            'Usuarios',
+            staffUsers.map((u) => [
+              u.id,
+              u.nombre,
+              u.rol,
+              u.pin,
+              u.activo ? 'SI' : 'NO',
+              u.telefono || '',
+              u.email || '',
+              u.ultimoAcceso || '',
+            ])
           );
 
           setLastSyncTime(new Date().toLocaleTimeString());
@@ -664,17 +883,17 @@ export default function App() {
 
   // Restore sample demo data
   const handleRestoreDemoData = () => {
-    setMenu(INITIAL_MENU);
-    localStorage.setItem('restoflow_menu', JSON.stringify(INITIAL_MENU));
+    setMenu(ANTOJOS_MAR_Y_TIERRA_MENU);
+    localStorage.setItem('restoflow_menu', JSON.stringify(ANTOJOS_MAR_Y_TIERRA_MENU));
 
-    setTables(INITIAL_TABLES);
-    localStorage.setItem('restoflow_tables', JSON.stringify(INITIAL_TABLES));
+    setTables(DEMO_SAMPLE_TABLES);
+    localStorage.setItem('restoflow_tables', JSON.stringify(DEMO_SAMPLE_TABLES));
 
-    setComandas(INITIAL_COMANDAS);
-    localStorage.setItem('restoflow_comandas', JSON.stringify(INITIAL_COMANDAS));
+    setComandas(DEMO_SAMPLE_COMANDAS);
+    localStorage.setItem('restoflow_comandas', JSON.stringify(DEMO_SAMPLE_COMANDAS));
 
-    setVentas(INITIAL_VENTAS);
-    localStorage.setItem('restoflow_ventas', JSON.stringify(INITIAL_VENTAS));
+    setVentas(DEMO_SAMPLE_VENTAS);
+    localStorage.setItem('restoflow_ventas', JSON.stringify(DEMO_SAMPLE_VENTAS));
 
     setCompras(INITIAL_COMPRAS);
     localStorage.setItem('restoflow_compras', JSON.stringify(INITIAL_COMPRAS));
@@ -685,24 +904,24 @@ export default function App() {
     setClientes(INITIAL_CLIENTES);
     localStorage.setItem('restoflow_clientes', JSON.stringify(INITIAL_CLIENTES));
 
-    setFacturas(INITIAL_FACTURAS);
-    localStorage.setItem('restoflow_facturas', JSON.stringify(INITIAL_FACTURAS));
+    setFacturas(DEMO_SAMPLE_FACTURAS);
+    localStorage.setItem('restoflow_facturas', JSON.stringify(DEMO_SAMPLE_FACTURAS));
 
-    setReservas(INITIAL_RESERVAS);
-    localStorage.setItem('restoflow_reservas', JSON.stringify(INITIAL_RESERVAS));
+    setReservas(DEMO_SAMPLE_RESERVAS);
+    localStorage.setItem('restoflow_reservas', JSON.stringify(DEMO_SAMPLE_RESERVAS));
 
     setCajeros(INITIAL_CAJEROS);
     localStorage.setItem('restoflow_cajeros', JSON.stringify(INITIAL_CAJEROS));
 
-    setActiveSesionCaja(INITIAL_SESIONES_CAJA[0] || null);
-    if (INITIAL_SESIONES_CAJA[0]) {
-      localStorage.setItem('restoflow_active_sesion_caja', JSON.stringify(INITIAL_SESIONES_CAJA[0]));
+    setActiveSesionCaja(DEMO_SAMPLE_SESIONES_CAJA[0] || null);
+    if (DEMO_SAMPLE_SESIONES_CAJA[0]) {
+      localStorage.setItem('restoflow_active_sesion_caja', JSON.stringify(DEMO_SAMPLE_SESIONES_CAJA[0]));
     }
-    setHistorialSesiones(INITIAL_SESIONES_CAJA);
-    localStorage.setItem('restoflow_historial_sesiones', JSON.stringify(INITIAL_SESIONES_CAJA));
+    setHistorialSesiones(DEMO_SAMPLE_SESIONES_CAJA);
+    localStorage.setItem('restoflow_historial_sesiones', JSON.stringify(DEMO_SAMPLE_SESIONES_CAJA));
 
-    setMovimientosCaja(INITIAL_MOVIMIENTOS_CAJA);
-    localStorage.setItem('restoflow_movimientos_caja', JSON.stringify(INITIAL_MOVIMIENTOS_CAJA));
+    setMovimientosCaja(DEMO_SAMPLE_MOVIMIENTOS_CAJA);
+    localStorage.setItem('restoflow_movimientos_caja', JSON.stringify(DEMO_SAMPLE_MOVIMIENTOS_CAJA));
 
     setStaffUsers(INITIAL_STAFF_USERS);
     localStorage.setItem('restoflow_staff_users', JSON.stringify(INITIAL_STAFF_USERS));
@@ -1663,12 +1882,38 @@ export default function App() {
     }
   };
 
+  const syncStaffUsersToSheets = async (usersList: StaffUser[]) => {
+    const token = await getAccessToken();
+    if (token && spreadsheetId) {
+      try {
+        await syncSheetFullRows(
+          token,
+          spreadsheetId,
+          'Usuarios',
+          usersList.map((u) => [
+            u.id,
+            u.nombre,
+            u.rol,
+            u.pin,
+            u.activo ? 'SI' : 'NO',
+            u.telefono || '',
+            u.email || '',
+            u.ultimoAcceso || '',
+          ])
+        );
+      } catch (err) {
+        console.warn('Could not sync staff users to Google Sheets:', err);
+      }
+    }
+  };
+
   const handleAddStaffUser = (newUser: Omit<StaffUser, 'id'>) => {
     const nextId = `USR-${(staffUsers.length + 1).toString().padStart(3, '0')}`;
     const created: StaffUser = { ...newUser, id: nextId };
     const updated = [...staffUsers, created];
     setStaffUsers(updated);
     localStorage.setItem('restoflow_staff_users', JSON.stringify(updated));
+    syncStaffUsersToSheets(updated);
 
     if (created.rol === 'Cajero') {
       const newCajero: Cajero = {
@@ -1690,6 +1935,7 @@ export default function App() {
     const updated = staffUsers.map((u) => (u.id === updatedUser.id ? updatedUser : u));
     setStaffUsers(updated);
     localStorage.setItem('restoflow_staff_users', JSON.stringify(updated));
+    syncStaffUsersToSheets(updated);
     if (activeStaffUser?.id === updatedUser.id) {
       setActiveStaffUser(updatedUser);
     }
@@ -1701,6 +1947,7 @@ export default function App() {
     );
     setStaffUsers(updated);
     localStorage.setItem('restoflow_staff_users', JSON.stringify(updated));
+    syncStaffUsersToSheets(updated);
     if (activeStaffUser?.id === userId) {
       const activeRemaining = updated.find((u) => u.activo);
       setActiveStaffUser(activeRemaining || null);
@@ -2039,6 +2286,7 @@ export default function App() {
               clientes: clientes.length,
               facturas: facturas.length,
               reservas: reservas.length,
+              staffUsers: staffUsers.length,
             }}
             onOpenDomainHelp={() => setIsUnauthorizedDomainOpen(true)}
           />
@@ -2146,6 +2394,8 @@ export default function App() {
         isOpen={isRestaurantProfileOpen}
         onClose={() => setIsRestaurantProfileOpen(false)}
         currentInfo={restaurantInfo}
+        isAdmin={activeStaffUser?.rol === 'Administrador'}
+        onRequireAdminAuth={requireAdminAuth}
         onOpenResetData={() =>
           requireAdminAuth(
             () => setIsResetDataModalOpen(true),
@@ -2153,8 +2403,22 @@ export default function App() {
           )
         }
         onSave={(updated) => {
+          if (activeStaffUser?.rol !== 'Administrador') {
+            setActiveToast({
+              id: Date.now().toString(),
+              title: 'Acceso Denegado',
+              body: 'Solo un Administrador puede modificar los datos del restaurante.',
+              timestamp: new Date().toLocaleTimeString(),
+            });
+            return;
+          }
           setRestaurantInfo(updated);
           saveRestaurantInfo(updated);
+          recordAuditLog({
+            accion: 'Información del restaurante modificada',
+            categoria: 'administracion',
+            detalles: `Modificados datos de ${updated.nombreComercial} (NIT: ${updated.nit}) por Administrador ${activeStaffUser.nombre}`,
+          });
         }}
       />
 
@@ -2192,11 +2456,12 @@ export default function App() {
         onCancel={() => setConfirmModalConfig((c) => ({ ...c, isOpen: false }))}
       />
 
-      {/* Firebase Unauthorized Domain Configuration Help Modal */}
+      {/* Firebase & Google OAuth Configuration Help Modal */}
       <UnauthorizedDomainModal
         isOpen={isUnauthorizedDomainOpen}
         onClose={() => setIsUnauthorizedDomainOpen(false)}
         onRetry={handleLogin}
+        initialTab={unauthorizedModalTab}
       />
 
       {/* Production Reset / Clean Start Data Modal */}

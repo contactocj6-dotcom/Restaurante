@@ -197,13 +197,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          {/* Reset to Production clean data button */}
-          {onOpenResetData && (
+          {/* Reset to Production clean data button - Visible ONLY for Administrador */}
+          {onOpenResetData && activeStaffUser?.rol === 'Administrador' && (
             <button
               type="button"
               onClick={onOpenResetData}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-emerald-500/40 hover:text-emerald-300 transition shadow-sm"
-              title="Puesta a Cero / Iniciar en Modo Producción (Vaciar datos de muestra)"
+              title="Puesta a Cero / Iniciar en Modo Producción (Acceso exclusivo Administrador)"
             >
               <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
               <span className="hidden xl:inline">Puesta a Cero</span>
