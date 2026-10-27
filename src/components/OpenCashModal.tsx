@@ -48,7 +48,7 @@ export const OpenCashModal: React.FC<OpenCashModalProps> = ({
     activeCajero?.id || cajeros[0]?.id || ''
   );
   const [turno, setTurno] = useState<TurnoTipo>('Turno Mañana (08:00 - 15:00)');
-  const [montoBase, setMontoBase] = useState<number>(200000);
+  const [montoBaseInput, setMontoBaseInput] = useState<string>('200000');
   const [notasApertura, setNotasApertura] = useState<string>(
     'Fondo base entregado en gaveta para cambio inicial en efectivo (COP).'
   );
@@ -62,6 +62,7 @@ export const OpenCashModal: React.FC<OpenCashModalProps> = ({
 
   if (!isOpen) return null;
 
+  const currentMontoBase = parseFloat(montoBaseInput) || 0;
   const activeCajerosList = cajeros.filter((c) => c.activo);
 
   const calculateBreakdownTotal = () => {
@@ -72,7 +73,7 @@ export const OpenCashModal: React.FC<OpenCashModalProps> = ({
 
   const handleApplyBreakdown = () => {
     const total = calculateBreakdownTotal();
-    setMontoBase(total);
+    setMontoBaseInput(String(total));
     setUseBreakdown(false);
   };
 
@@ -81,7 +82,8 @@ export const OpenCashModal: React.FC<OpenCashModalProps> = ({
     const cajero = cajeros.find((c) => c.id === selectedCajeroId);
     if (!cajero) return;
 
-    if (montoBase < 0) {
+    const finalBase = parseFloat(montoBaseInput) || 0;
+    if (finalBase < 0) {
       alert('El monto base inicial no puede ser negativo');
       return;
     }
@@ -90,7 +92,7 @@ export const OpenCashModal: React.FC<OpenCashModalProps> = ({
       cajeroId: cajero.id,
       cajeroNombre: cajero.nombre,
       turno,
-      montoBase: Number(montoBase),
+      montoBase: finalBase,
       notasApertura: notasApertura.trim(),
     });
     onClose();
@@ -232,40 +234,48 @@ export const OpenCashModal: React.FC<OpenCashModalProps> = ({
 
             {/* Quick Amounts */}
             <div className="flex flex-wrap gap-2">
-              {PRESET_BASES.map((preset) => (
+              {[0, 50000, 100000, 200000, 300000, 500000].map((preset) => (
                 <button
                   key={preset}
                   type="button"
-                  onClick={() => setMontoBase(preset)}
+                  onClick={() => setMontoBaseInput(String(preset))}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
-                    montoBase === preset
+                    currentMontoBase === preset
                       ? 'bg-emerald-500 text-zinc-950 border-emerald-400 shadow-md shadow-emerald-500/20'
                       : 'bg-zinc-800/80 border-zinc-700 text-zinc-300 hover:bg-zinc-800'
                   }`}
                 >
-                  {formatCOP(preset)}
+                  {preset === 0 ? '$0 (Sin Base)' : formatCOP(preset)}
                 </button>
               ))}
             </div>
 
             {/* Direct Input */}
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold text-zinc-400">
-                $
-              </span>
-              <input
-                type="number"
-                step="1000"
-                min="0"
-                value={montoBase}
-                onChange={(e) => setMontoBase(parseFloat(e.target.value) || 0)}
-                placeholder="200000"
-                className="w-full pl-9 pr-14 py-3 bg-zinc-950 border border-zinc-700 rounded-xl text-xl font-black text-emerald-400 font-mono focus:outline-none focus:border-emerald-500"
-                required
-              />
-              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">
-                COP
-              </span>
+            <div className="space-y-1.5">
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-lg font-bold text-zinc-400">
+                  $
+                </span>
+                <input
+                  type="number"
+                  step="1000"
+                  min="0"
+                  value={montoBaseInput}
+                  onChange={(e) => setMontoBaseInput(e.target.value)}
+                  placeholder="Ej. 200000"
+                  className="w-full pl-9 pr-14 py-3 bg-zinc-950 border border-zinc-700 rounded-xl text-xl font-black text-emerald-400 font-mono focus:outline-none focus:border-emerald-500"
+                  required
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500">
+                  COP
+                </span>
+              </div>
+              <p className="text-[11px] text-zinc-400 flex items-center justify-between">
+                <span>Fondo asignado para gaveta:</span>
+                <strong className="text-emerald-400 font-mono font-bold">
+                  {formatCOP(currentMontoBase)}
+                </strong>
+              </p>
             </div>
 
             {/* Interactive Breakdown Calculator */}

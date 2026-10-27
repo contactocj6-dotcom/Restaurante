@@ -20,12 +20,18 @@ import {
   Eye,
   Save,
   Lock,
+  FileSpreadsheet,
+  Copy,
+  Check,
+  Radio,
+  ExternalLink as LinkIcon,
 } from 'lucide-react';
 import {
   DianCompanyInfo,
   DIAN_COMPANY_INFO,
   saveRestaurantInfo,
 } from '../utils/colombiaFiscal';
+import { extractSpreadsheetId } from '../services/sheetsService';
 
 interface RestaurantProfileModalProps {
   isOpen: boolean;
@@ -46,9 +52,10 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
   isAdmin = true,
   onRequireAdminAuth,
 }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'ubicacion' | 'redes' | 'dian' | 'preview'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'ubicacion' | 'redes' | 'dian' | 'sheets' | 'preview'>('general');
   const [formData, setFormData] = useState<DianCompanyInfo>({ ...currentInfo });
   const [showSavedToast, setShowSavedToast] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   if (!isOpen) return null;
 
@@ -219,6 +226,19 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
           >
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>Facturación DIAN & POS</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('sheets')}
+            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition ${
+              activeTab === 'sheets'
+                ? 'bg-amber-500 text-zinc-950 shadow-md font-bold'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>Google Sheets & Nube</span>
           </button>
 
           <button
@@ -728,6 +748,135 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
                       className="w-full bg-zinc-950/80 border border-zinc-700/80 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
                     />
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB: GOOGLE SHEETS & SINCRONIZACIÓN TRANSPARENTE DEL RESTAURANTE */}
+            {activeTab === 'sheets' && (
+              <div className="space-y-6 animate-in fade-in">
+                {/* Banner Informativo sobre Sincronización Transparente */}
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-start gap-3.5">
+                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
+                    <FileSpreadsheet className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-emerald-300">
+                      Sincronización Transparente a Nivel de Restaurante
+                    </h4>
+                    <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
+                      Esta configuración es global del establecimiento. Al vincular aquí la hoja de Google Sheets, 
+                      <strong> todos los dispositivos de tu restaurante</strong> (celulares de los meseros, tablets de cocina, pantallas de caja) 
+                      se comunicarán y sincronizarán en segundo plano automáticamente, 
+                      sin que cada usuario tenga que configurar o autorizar manualmente en cada dispositivo.
+                    </p>
+                  </div>
+                </div>
+
+                {/* ID o Enlace de la Hoja */}
+                <div className="bg-zinc-950/60 border border-zinc-800 rounded-2xl p-4 space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-amber-400 mb-1.5 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                        ID o URL de Google Sheets del Restaurante
+                      </span>
+                      {formData.googleSheetId && (
+                        <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                          ID Activo: {formData.googleSheetId.slice(0, 8)}...{formData.googleSheetId.slice(-6)}
+                        </span>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      disabled={!isAdmin}
+                      value={formData.googleSheetId || ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const cleaned = extractSpreadsheetId(raw);
+                        setFormData((prev) => ({
+                          ...prev,
+                          googleSheetId: cleaned,
+                          googleSheetUrl: raw.includes('http') ? raw : `https://docs.google.com/spreadsheets/d/${cleaned}/edit`,
+                        }));
+                      }}
+                      placeholder="Pega aquí el enlace de tu Google Sheet (ej. https://docs.google.com/spreadsheets/d/1BxiM.../edit) o solo su ID"
+                      className="w-full bg-zinc-900 border border-zinc-700/80 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white font-mono focus:outline-none focus:border-amber-500 disabled:opacity-60"
+                    />
+                    <p className="text-[11px] text-zinc-400 mt-1.5 leading-normal">
+                      Puedes pegar la URL completa del navegador o únicamente el ID alfanumérico. El sistema lo detectará automáticamente.
+                    </p>
+                  </div>
+
+                  {/* Acciones de la Hoja */}
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-800/80">
+                    {formData.googleSheetId && (
+                      <a
+                        href={formData.googleSheetUrl || `https://docs.google.com/spreadsheets/d/${formData.googleSheetId}/edit`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-emerald-400 border border-zinc-700 text-xs font-semibold transition"
+                      >
+                        <LinkIcon className="w-3.5 h-3.5" />
+                        <span>Abrir Hoja en Google Sheets</span>
+                      </a>
+                    )}
+
+                    {/* Copiar enlace directo con parámetro para nuevos dispositivos */}
+                    {formData.googleSheetId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const url = `${window.location.origin}${window.location.pathname}?sheet=${formData.googleSheetId}`;
+                          navigator.clipboard.writeText(url);
+                          setCopiedLink(true);
+                          setTimeout(() => setCopiedLink(false), 2500);
+                        }}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-semibold transition"
+                        title="Copia el enlace directo configurado con la hoja para abrir RestoFlow en celulares de meseros o tablets"
+                      >
+                        {copiedLink ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-400">¡Enlace de Sucursal Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Copiar Enlace para Dispositivos</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sincronización Automática en Segundo Plano */}
+                <div className="bg-zinc-950/60 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
+                      <span className="text-xs font-bold text-white">
+                        Sincronización Automática Continua
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                        Recomendado
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-400">
+                      Sincroniza silenciosamente en segundo plano cada 45 segundos y ante cada comanda o factura, manteniendo mesas y ventas actualizadas en todos los dispositivos.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      disabled={!isAdmin}
+                      checked={formData.autoSyncEnabled !== false}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, autoSyncEnabled: e.target.checked }))}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                  </label>
                 </div>
               </div>
             )}

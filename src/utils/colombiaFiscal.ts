@@ -39,6 +39,10 @@ export interface DianCompanyInfo {
   proveedorSoftware: string;
   proveedorNit: string;
   codigoActividadCIIU: string;
+  // Configuración Central de Base de Datos / Google Sheets del Restaurante
+  googleSheetId?: string;
+  googleSheetUrl?: string;
+  autoSyncEnabled?: boolean;
 }
 
 export const DIAN_COMPANY_INFO: DianCompanyInfo = {
@@ -73,6 +77,9 @@ export const DIAN_COMPANY_INFO: DianCompanyInfo = {
   proveedorSoftware: 'RestoFlow Cloud Tech S.A.S. (Software Propio Autorizado DIAN)',
   proveedorNit: '901.784.321-8',
   codigoActividadCIIU: '5611 (Expendio a la mesa de comidas preparadas)',
+  googleSheetId: '',
+  googleSheetUrl: '',
+  autoSyncEnabled: true,
 };
 
 export const RESTAURANT_INFO_STORAGE_KEY = 'restoflow_restaurant_info';

@@ -353,7 +353,7 @@ export default function App() {
 
   const activeCajero = cajeros.find((c) => c.id === activeCajeroId) || cajeros[0] || null;
 
-  // Google Sheets Connection State (Supports URL sharing across browsers e.g. ?sheet=ID)
+  // Google Sheets Connection State (Supports URL sharing across browsers e.g. ?sheet=ID, and restaurant-level global setting)
   const [spreadsheetId, setSpreadsheetId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -362,6 +362,10 @@ export default function App() {
         localStorage.setItem('restoflow_sheet_id', urlSheet);
         return urlSheet;
       }
+    }
+    const savedRestaurantInfo = getSavedRestaurantInfo();
+    if (savedRestaurantInfo?.googleSheetId) {
+      return savedRestaurantInfo.googleSheetId;
     }
     return localStorage.getItem('restoflow_sheet_id') || '';
   });
@@ -598,6 +602,25 @@ export default function App() {
     );
     return () => unsubscribe();
   }, [spreadsheetId]);
+
+  // Transparent background synchronization at the restaurant level (every 45 seconds)
+  useEffect(() => {
+    const targetSheetId = restaurantInfo.googleSheetId || spreadsheetId;
+    if (!targetSheetId || restaurantInfo.autoSyncEnabled === false) return;
+
+    const interval = setInterval(async () => {
+      const token = await getAccessToken();
+      if (token && targetSheetId) {
+        try {
+          await handleSyncFromSheets(token, targetSheetId);
+        } catch (e) {
+          // Silent background sync failure handling
+        }
+      }
+    }, 45000);
+
+    return () => clearInterval(interval);
+  }, [restaurantInfo.googleSheetId, restaurantInfo.autoSyncEnabled, spreadsheetId]);
 
   // Real-time Push Notification Listener (SSE)
   useEffect(() => {
@@ -2414,6 +2437,15 @@ export default function App() {
           }
           setRestaurantInfo(updated);
           saveRestaurantInfo(updated);
+          if (updated.googleSheetId) {
+            setSpreadsheetId(updated.googleSheetId);
+            localStorage.setItem('restoflow_sheet_id', updated.googleSheetId);
+            getAccessToken().then((token) => {
+              if (token) {
+                handleSyncFromSheets(token, updated.googleSheetId);
+              }
+            });
+          }
           recordAuditLog({
             accion: 'Información del restaurante modificada',
             categoria: 'administracion',

@@ -33,7 +33,18 @@ const registeredKitchenDevices: Map<string, DeviceRegistration> = new Map();
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const portArgIndex = process.argv.indexOf('--port');
+  const cliPort =
+    portArgIndex !== -1 && process.argv[portArgIndex + 1]
+      ? parseInt(process.argv[portArgIndex + 1], 10)
+      : null;
+  // In AI Studio, Nginx listens on 8080 and proxies incoming traffic to port 3000.
+  // The dev/production app server must always listen on port 3000.
+  const envPort =
+    process.env.PORT && process.env.PORT !== '8080'
+      ? parseInt(process.env.PORT, 10)
+      : null;
+  const PORT = cliPort || envPort || 3000;
 
   app.use(express.json());
 
@@ -251,7 +262,10 @@ async function startServer() {
     });
   } else {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR !== 'true',
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

@@ -233,7 +233,7 @@ export const TableGrid: React.FC<TableGridProps> = ({
       </div>
 
       {/* Grid of Tables */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pt-1">
+      <div className="grid grid-cols-1 min-[420px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 pt-1">
         {filteredTables.map((table) => {
           const activeComanda = getActiveComanda(table);
           const style = getStatusColor(table.estado);
@@ -246,7 +246,7 @@ export const TableGrid: React.FC<TableGridProps> = ({
               key={table.id}
               onMouseEnter={() => setHoveredTableId(table.id)}
               onMouseLeave={() => setHoveredTableId(null)}
-              className={`group relative rounded-2xl border p-5 transition-all duration-200 bg-zinc-900/90 shadow-lg flex flex-col justify-between ${style.glow} hover:shadow-xl hover:z-30`}
+              className={`group relative rounded-2xl border p-3.5 sm:p-5 transition-all duration-200 bg-zinc-900/90 shadow-lg flex flex-col justify-between ${style.glow} hover:shadow-xl hover:z-30`}
             >
               {/* Tooltip / Popover flotante al pasar el ratón sobre la mesa ocupada */}
               {isOccupied && activeComanda && timeInfo && (

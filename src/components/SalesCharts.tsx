@@ -71,24 +71,6 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({ ventas, comandas }) =>
       }
     });
 
-    // If all totals are 0 (e.g. freshly seeded with today-only timestamps),
-    // ensure realistic demonstration distribution across the last days
-    const totalAgg = Object.values(daysMap).reduce((acc, curr) => acc + curr.total, 0);
-    if (totalAgg === 0 && ventas.length > 0) {
-      const sampleAmounts = [142.5, 210.0, 185.0, 260.5, 310.0, 245.0];
-      const keys = Object.keys(daysMap);
-      keys.forEach((k, idx) => {
-        if (idx < keys.length - 1) {
-          daysMap[k].total = sampleAmounts[idx % sampleAmounts.length];
-          daysMap[k].count = Math.max(2, (idx % 4) + 2);
-        }
-      });
-      // Add existing ventas to the last day
-      const lastKey = keys[keys.length - 1];
-      daysMap[lastKey].total = ventas.reduce((s, v) => s + v.monto, 0);
-      daysMap[lastKey].count = ventas.length;
-    }
-
     return Object.values(daysMap);
   }, [ventas]);
 
@@ -113,16 +95,8 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({ ventas, comandas }) =>
 
     const sorted = Object.values(itemMap).sort((a, b) => b.quantity - a.quantity);
 
-    // If fewer than 2 items in comandas, provide top representative items from restaurant catalog
-    if (sorted.length < 3) {
-      return [
-        { name: 'Hamburguesa Angus', quantity: 18, revenue: 261.0 },
-        { name: 'Pizza Margherita', quantity: 14, revenue: 224.0 },
-        { name: 'Cerveza IPA (500ml)', quantity: 22, revenue: 132.0 },
-        { name: 'Costillas BBQ', quantity: 9, revenue: 171.0 },
-        { name: 'Tacos de Birria', quantity: 12, revenue: 144.0 },
-        { name: 'Limonada Natural', quantity: 15, revenue: 67.5 },
-      ];
+    if (sorted.length === 0) {
+      return [];
     }
 
     // Top 5 and group remainder as "Otros"
@@ -281,49 +255,59 @@ export const SalesCharts: React.FC<SalesChartsProps> = ({ ventas, comandas }) =>
           </div>
         </div>
 
-        <div className="h-64 sm:h-72 w-full mt-2 flex items-center justify-center">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Tooltip content={<CustomPieTooltip />} />
-              <Pie
-                data={topProductsData}
-                dataKey="quantity"
-                nameKey="name"
-                cx="50%"
-                cy="50%"
-                outerRadius={85}
-                innerRadius={50}
-                paddingAngle={3}
-                stroke="#18181b"
-                strokeWidth={2}
-              >
-                {topProductsData.map((_, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={PIE_COLORS[index % PIE_COLORS.length]}
-                  />
-                ))}
-              </Pie>
-              <Legend
-                verticalAlign="bottom"
-                height={36}
-                iconType="circle"
-                iconSize={8}
-                formatter={(value) => (
-                  <span className="text-[11px] text-zinc-300 font-medium">{value}</span>
-                )}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+        {topProductsData.length === 0 ? (
+          <div className="h-64 sm:h-72 w-full mt-2 flex flex-col items-center justify-center text-center p-6 text-zinc-500">
+            <ShoppingBag className="w-10 h-10 stroke-1 text-zinc-700 mb-2" />
+            <p className="text-sm font-semibold text-zinc-400">Sin ventas ni pedidos aún</p>
+            <p className="text-xs text-zinc-600 mt-1">
+              Los platos más pedidos aparecerán aquí a medida que se atiendan comandas.
+            </p>
+          </div>
+        ) : (
+          <div className="h-64 sm:h-72 w-full mt-2 flex items-center justify-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Tooltip content={<CustomPieTooltip />} />
+                <Pie
+                  data={topProductsData}
+                  dataKey="quantity"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  outerRadius={85}
+                  innerRadius={50}
+                  paddingAngle={3}
+                  stroke="#18181b"
+                  strokeWidth={2}
+                >
+                  {topProductsData.map((_, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={PIE_COLORS[index % PIE_COLORS.length]}
+                    />
+                  ))}
+                </Pie>
+                <Legend
+                  verticalAlign="bottom"
+                  height={36}
+                  iconType="circle"
+                  iconSize={8}
+                  formatter={(value) => (
+                    <span className="text-[11px] text-zinc-300 font-medium">{value}</span>
+                  )}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
 
         <div className="pt-3 border-t border-zinc-800/80 flex items-center justify-between text-xs text-zinc-400">
           <span className="flex items-center gap-1.5">
             <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
-            <span>Top 1: {topProductsData[0]?.name || 'N/A'}</span>
+            <span>Top 1: {topProductsData[0]?.name || 'Sin ventas aún'}</span>
           </span>
           <span className="font-mono text-zinc-200">
-            {topProductsData[0] ? `${topProductsData[0].quantity} pedidos` : ''}
+            {topProductsData[0] ? `${topProductsData[0].quantity} pedidos` : '$0 COP'}
           </span>
         </div>
       </div>

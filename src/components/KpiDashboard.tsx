@@ -110,26 +110,26 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
     };
   }, [tables, comandas, ventas]);
 
-  // 3. KPI: Horas Pico de Mayor Afluencia
+  // 3. KPI: Horas Pico de Mayor Afluencia (Calculado estrictamente sobre pedidos y ventas reales)
   const peakHoursData = useMemo(() => {
-    // Definimos las franjas horarias operativas del restaurante (11:00 a 23:00)
+    // Definimos las franjas horarias operativas del restaurante (11:00 a 23:00) con base en cero
     const hours = [
-      { hora: '11:00', label: '11 AM', pedidos: 2, comensales: 4, ingresos: 180000 },
-      { hora: '12:00', label: '12 PM', pedidos: 6, comensales: 14, ingresos: 450000 },
-      { hora: '13:00', label: '1 PM', pedidos: 15, comensales: 38, ingresos: 1250000 }, // Pico Almuerzo
-      { hora: '14:00', label: '2 PM', pedidos: 12, comensales: 28, ingresos: 980000 },
-      { hora: '15:00', label: '3 PM', pedidos: 4, comensales: 8, ingresos: 320000 },
-      { hora: '16:00', label: '4 PM', pedidos: 3, comensales: 6, ingresos: 210000 },
-      { hora: '17:00', label: '5 PM', pedidos: 5, comensales: 10, ingresos: 420000 },
-      { hora: '18:00', label: '6 PM', pedidos: 8, comensales: 18, ingresos: 750000 },
-      { hora: '19:00', label: '7 PM', pedidos: 14, comensales: 32, ingresos: 1450000 },
-      { hora: '20:00', label: '8 PM', pedidos: 22, comensales: 54, ingresos: 2100000 }, // Pico Cena Max
-      { hora: '21:00', label: '9 PM', pedidos: 18, comensales: 42, ingresos: 1850000 },
-      { hora: '22:00', label: '10 PM', pedidos: 9, comensales: 18, ingresos: 890000 },
-      { hora: '23:00', label: '11 PM', pedidos: 3, comensales: 5, ingresos: 280000 },
+      { hora: '11:00', label: '11 AM', pedidos: 0, comensales: 0, ingresos: 0 },
+      { hora: '12:00', label: '12 PM', pedidos: 0, comensales: 0, ingresos: 0 },
+      { hora: '13:00', label: '1 PM', pedidos: 0, comensales: 0, ingresos: 0 },
+      { hora: '14:00', label: '2 PM', pedidos: 0, comensales: 0, ingresos: 0 },
+      { hora: '15:00', label: '3 PM', pedidos: 0, comensales: 0, ingresos: 0 },
+      { hora: '16:00', label: '4 PM', pedidos: 0, comensales: 0, ingresos: 0 },
+      { hora: '17:00', label: '5 PM', pedidos: 0, comensales: 0, ingresos: 0 },
+      { hora: '18:00', label: '6 PM', pedidos: 0, comensales: 0, ingresos: 0 },
+      { hora: '19:00', label: '7 PM', pedidos: 0, comensales: 0, ingresos: 0 },
+      { hora: '20:00', label: '8 PM', pedidos: 0, comensales: 0, ingresos: 0 },
+      { hora: '21:00', label: '9 PM', pedidos: 0, comensales: 0, ingresos: 0 },
+      { hora: '22:00', label: '10 PM', pedidos: 0, comensales: 0, ingresos: 0 },
+      { hora: '23:00', label: '11 PM', pedidos: 0, comensales: 0, ingresos: 0 },
     ];
 
-    // Distribuir datos reales de comandas y ventas en sus horas si coinciden
+    // Distribuir datos reales de comandas y ventas en sus horas
     comandas.forEach((c) => {
       if (c.timestamp) {
         const hour = new Date(c.timestamp).getHours();
@@ -137,7 +137,7 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
         const match = hours.find((h) => h.hora === hourStr);
         if (match) {
           match.pedidos += 1;
-          match.ingresos += Math.round(c.total);
+          match.ingresos += Math.round(c.total || 0);
           match.comensales += 2;
         }
       }
@@ -149,7 +149,7 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
         const hourStr = `${hour.toString().padStart(2, '0')}:00`;
         const match = hours.find((h) => h.hora === hourStr);
         if (match) {
-          match.ingresos += Math.round(v.monto);
+          match.ingresos += Math.round(v.monto || 0);
         }
       }
     });
@@ -157,8 +157,18 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
     return hours;
   }, [comandas, ventas]);
 
-  // Identificar la hora pico máxima
+  // Identificar la hora pico máxima (o null si aún no hay ventas/pedidos)
   const topRushHour = useMemo(() => {
+    const hasData = peakHoursData.some((h) => h.pedidos > 0 || h.ingresos > 0);
+    if (!hasData) {
+      return {
+        hora: '--:--',
+        label: 'Sin actividad',
+        pedidos: 0,
+        comensales: 0,
+        ingresos: 0,
+      };
+    }
     return peakHoursData.reduce(
       (max, curr) => (curr.pedidos > max.pedidos ? curr : max),
       peakHoursData[0]
@@ -214,7 +224,7 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
     return null;
   };
 
-  // 4. KPI: Volumen de Ventas Diario de la Última Semana (7 Días)
+  // 4. KPI: Volumen de Ventas Diario de la Última Semana (7 Días) - Datos Reales Exclusivamente
   const last7DaysSalesData = useMemo(() => {
     const days: {
       dateStr: string;
@@ -227,9 +237,6 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
     }[] = [];
 
     const now = new Date();
-    // Curva base para la semana en un restaurante concurrido en Colombia (COP)
-    const baselineAmounts = [1250000, 1480000, 1390000, 1850000, 2650000, 3480000, 2350000];
-    const baselineOrders = [18, 22, 20, 26, 38, 48, 34];
 
     for (let i = 6; i >= 0; i--) {
       const d = new Date(now);
@@ -253,16 +260,12 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
         return v.fecha.startsWith(dateStr) || v.fecha.split('T')[0] === dateStr;
       });
 
-      const realMonto = matchingVentas.reduce((sum, v) => sum + v.monto, 0);
+      const realMonto = matchingVentas.reduce((sum, v) => sum + (v.monto || 0), 0);
       const realCount = matchingVentas.length;
-
       const isToday = i === 0;
-      const baseMonto = baselineAmounts[6 - i] || 1500000;
-      const baseOrders = baselineOrders[6 - i] || 20;
 
-      // Si hay ventas reales para el día, sumarlas; si no, complementar con histórico en COP
-      const totalMonto = realCount > 0 ? Math.round(realMonto) : baseMonto;
-      const totalCount = realCount > 0 ? realCount : baseOrders;
+      const totalMonto = Math.round(realMonto);
+      const totalCount = realCount;
       const ticketPromedio = totalCount > 0 ? Math.round(totalMonto / totalCount) : 0;
 
       days.push({
@@ -279,7 +282,7 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
     return days;
   }, [ventas]);
 
-  // Totales y estadísticas semanales
+  // Totales y estadísticas semanales reales
   const weeklyStats = useMemo(() => {
     const totalVentasSemana = last7DaysSalesData.reduce((acc, d) => acc + d.montoTotal, 0);
     const totalTransaccionesSemana = last7DaysSalesData.reduce(
@@ -289,14 +292,14 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
     const promedioDiario = Math.round(totalVentasSemana / 7);
     const mejorDia = last7DaysSalesData.reduce(
       (max, curr) => (curr.montoTotal > max.montoTotal ? curr : max),
-      last7DaysSalesData[0]
+      last7DaysSalesData[0] || { montoTotal: 0, dayLabel: 'Sin ventas', cantidadVentas: 0 }
     );
 
     return {
       totalVentasSemana,
       totalTransaccionesSemana,
       promedioDiario,
-      mejorDia,
+      mejorDia: totalVentasSemana > 0 ? mejorDia : { ...mejorDia, dayLabel: 'Sin ventas' },
     };
   }, [last7DaysSalesData]);
 

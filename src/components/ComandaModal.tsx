@@ -65,6 +65,7 @@ export const ComandaModal: React.FC<ComandaModalProps> = ({
   const [activeNoteItemId, setActiveNoteItemId] = useState<string | null>(null);
   const [tempNoteText, setTempNoteText] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [mobileTab, setMobileTab] = useState<'menu' | 'resumen'>('menu');
 
   // Initialize data when modal opens
   useEffect(() => {
@@ -148,6 +149,7 @@ export const ComandaModal: React.FC<ComandaModalProps> = ({
   };
 
   const totalAmount = items.reduce((sum, i) => sum + i.precio * i.cantidad, 0);
+  const totalItemsCount = items.reduce((sum, i) => sum + i.cantidad, 0);
 
   const selectedTable = tables.find((t) => t.id === selectedTableId);
 
@@ -227,10 +229,40 @@ export const ComandaModal: React.FC<ComandaModalProps> = ({
           </button>
         </div>
 
+        {/* Mobile Tab Switcher (Visible on mobile screens < lg) */}
+        <div className="flex lg:hidden border-b border-zinc-800 bg-zinc-900/90 px-3 py-2 gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setMobileTab('menu')}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+              mobileTab === 'menu'
+                ? 'bg-amber-500 text-zinc-950 shadow-md'
+                : 'text-zinc-400 hover:text-white bg-zinc-800/80'
+            }`}
+          >
+            <Utensils className="w-3.5 h-3.5" />
+            <span>Carta / Menú</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab('resumen')}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 ${
+              mobileTab === 'resumen'
+                ? 'bg-amber-500 text-zinc-950 shadow-md'
+                : 'text-zinc-400 hover:text-white bg-zinc-800/80'
+            }`}
+          >
+            <span>Comanda ({totalItemsCount})</span>
+            {totalAmount > 0 && (
+              <span className="font-mono text-[11px] opacity-90">• {formatCOP(totalAmount)}</span>
+            )}
+          </button>
+        </div>
+
         {/* Modal Body: Split into Menu Picker (Left/Center) & Order Summary (Right) */}
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
           {/* LEFT: Menu Explorer */}
-          <div className="flex-1 flex flex-col border-b lg:border-b-0 lg:border-r border-zinc-800 overflow-hidden bg-zinc-900/30">
+          <div className={`${mobileTab === 'menu' ? 'flex' : 'hidden lg:flex'} flex-1 flex-col border-b lg:border-b-0 lg:border-r border-zinc-800 overflow-hidden bg-zinc-900/30`}>
             {/* Table & Client Selection header */}
             <div className="p-4 border-b border-zinc-800 bg-zinc-900/60 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -334,16 +366,44 @@ export const ComandaModal: React.FC<ComandaModalProps> = ({
                 </div>
               ))}
             </div>
+
+            {/* Quick Mobile Order Floating/Sticky Bar */}
+            {items.length > 0 && (
+              <div className="p-3 bg-zinc-950/95 border-t border-zinc-800 lg:hidden flex items-center justify-between gap-3 shrink-0">
+                <div className="text-xs">
+                  <span className="text-zinc-400 block text-[11px]">{totalItemsCount} platos/bebidas</span>
+                  <span className="font-mono font-bold text-amber-400 text-sm">{formatCOP(totalAmount)}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileTab('resumen')}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition shadow"
+                >
+                  <span>Ver Comanda ({totalItemsCount})</span>
+                  <Send className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
           {/* RIGHT: Active Order Summary & Send to Kitchen */}
-          <div className="w-full lg:w-96 flex flex-col bg-zinc-950 overflow-hidden">
+          <div className={`${mobileTab === 'resumen' ? 'flex' : 'hidden lg:flex'} w-full lg:w-96 flex-col bg-zinc-950 overflow-hidden`}>
             <div className="p-4 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/50">
-              <div>
-                <h3 className="text-sm font-bold text-white">Comanda en Preparación</h3>
-                <p className="text-xs text-zinc-400">
-                  {selectedTable ? `Mesa #${selectedTable.numero}` : 'Seleccione mesa'} • {items.length} productos
-                </p>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMobileTab('menu')}
+                  className="lg:hidden p-1.5 rounded-lg bg-zinc-800 text-zinc-300 hover:text-white"
+                  title="Volver a la carta para agregar más platos"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Comanda en Preparación</h3>
+                  <p className="text-xs text-zinc-400">
+                    {selectedTable ? `Mesa #${selectedTable.numero}` : 'Seleccione mesa'} • {items.length} productos
+                  </p>
+                </div>
               </div>
 
               {items.length > 0 && (
