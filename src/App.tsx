@@ -57,10 +57,14 @@ import {
 import {
   createRestaurantSpreadsheet,
   fetchAllSheetsData,
+  fetchAllSheetsDataWithoutAuth,
   syncSheetFullRows,
   appendRowToGoogleSheet,
+  appendRowViaServer,
   getSpreadsheetDetails,
   extractSpreadsheetId,
+  fetchServerSheetsConfig,
+  saveServerSheetsConfig,
 } from './services/sheetsService';
 import { audioService } from './services/audioService';
 import { notificationService, AlertNotification } from './services/notificationService';
@@ -353,12 +357,15 @@ export default function App() {
 
   const activeCajero = cajeros.find((c) => c.id === activeCajeroId) || cajeros[0] || null;
 
-  // Google Sheets Connection State (Supports URL sharing across browsers e.g. ?sheet=ID, and restaurant-level global setting)
+  // Google Sheets Connection State (Prioritizes persistent restoflow_global_sheet_id configured by Admin)
   const [spreadsheetId, setSpreadsheetId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
+      const globalId = localStorage.getItem('restoflow_global_sheet_id');
+      if (globalId) return globalId;
       const params = new URLSearchParams(window.location.search);
       const urlSheet = params.get('sheet') || params.get('sheetId');
       if (urlSheet) {
+        localStorage.setItem('restoflow_global_sheet_id', urlSheet);
         localStorage.setItem('restoflow_sheet_id', urlSheet);
         return urlSheet;
       }
@@ -367,7 +374,11 @@ export default function App() {
     if (savedRestaurantInfo?.googleSheetId) {
       return savedRestaurantInfo.googleSheetId;
     }
-    return localStorage.getItem('restoflow_sheet_id') || '';
+    return (
+      (typeof window !== 'undefined' ? localStorage.getItem('restoflow_global_sheet_id') : '') ||
+      localStorage.getItem('restoflow_sheet_id') ||
+      ''
+    );
   });
   const [spreadsheetTitle, setSpreadsheetTitle] = useState<string>(() => {
     return localStorage.getItem('restoflow_sheet_title') || '';
@@ -524,22 +535,107 @@ export default function App() {
     }
   };
 
-  // One-time initialization check:
-  // If 'restoflow_initialized' is missing in localStorage, load values from Google Sheets (if connected)
-  // or load the initial default values for a single time.
-  // This guarantees that after tables/comandas are set to zero or updated, reloading the page will never overwrite them.
+  // Sync data without OAuth token (using public Google Sheet link / server proxy)
+  // This allows any waiter tablet or cashier phone to sync restaurant data without signing into Google.
+  const handleSyncWithoutAuth = useCallback(
+    async (sheetId?: string) => {
+      const targetSheetId = sheetId || restaurantInfo.googleSheetId || spreadsheetId;
+      if (!targetSheetId) return;
+
+      setIsSyncing(true);
+      try {
+        const data = await fetchAllSheetsDataWithoutAuth(targetSheetId);
+        if (data.menu && data.menu.length > 0) {
+          setMenu(data.menu);
+          localStorage.setItem('restoflow_menu', JSON.stringify(data.menu));
+        }
+        if (data.tables && data.tables.length > 0) {
+          setTables(data.tables);
+          localStorage.setItem('restoflow_tables', JSON.stringify(data.tables));
+        }
+        if (data.comandas !== undefined && data.comandas.length > 0) {
+          setComandas(data.comandas);
+          localStorage.setItem('restoflow_comandas', JSON.stringify(data.comandas));
+        }
+        if (data.ventas !== undefined && data.ventas.length > 0) {
+          setVentas(data.ventas);
+          localStorage.setItem('restoflow_ventas', JSON.stringify(data.ventas));
+        }
+        if (data.compras !== undefined && data.compras.length > 0) {
+          setCompras(data.compras);
+          localStorage.setItem('restoflow_compras', JSON.stringify(data.compras));
+        }
+        if (data.proveedores !== undefined && data.proveedores.length > 0) {
+          setProveedores(data.proveedores);
+          localStorage.setItem('restoflow_proveedores', JSON.stringify(data.proveedores));
+        }
+        if (data.clientes !== undefined && data.clientes.length > 0) {
+          setClientes(data.clientes);
+          localStorage.setItem('restoflow_clientes', JSON.stringify(data.clientes));
+        }
+        if (data.facturas !== undefined && data.facturas.length > 0) {
+          setFacturas(data.facturas);
+          localStorage.setItem('restoflow_facturas', JSON.stringify(data.facturas));
+        }
+        if (data.reservas !== undefined && data.reservas.length > 0) {
+          setReservas(data.reservas);
+          localStorage.setItem('restoflow_reservas', JSON.stringify(data.reservas));
+        }
+        if (data.staffUsers && data.staffUsers.length > 0) {
+          setStaffUsers(data.staffUsers);
+          localStorage.setItem('restoflow_staff_users', JSON.stringify(data.staffUsers));
+        }
+
+        setIsSheetsConnected(true);
+        setLastSyncTime(new Date().toLocaleTimeString());
+      } catch (err) {
+        console.warn('Sync without auth error:', err);
+      } finally {
+        setIsSyncing(false);
+      }
+    },
+    [restaurantInfo.googleSheetId, spreadsheetId]
+  );
+
+  // One-time initialization & Server Config Check:
+  // 1. Check if the server already has a Google Sheet URL configured centrally for the restaurant.
+  // 2. If 'restoflow_initialized' is missing, hydrate from Sheets (via OAuth or public link) or use defaults.
   useEffect(() => {
-    const initialized = localStorage.getItem('restoflow_initialized');
-    if (!initialized) {
-      const runInitialSetup = async () => {
+    const runInitialSetup = async () => {
+      // 1. Check server-side restaurant sheets configuration
+      let targetSheetId = spreadsheetId || localStorage.getItem('restoflow_sheet_id') || restaurantInfo.googleSheetId;
+      try {
+        const serverConfig = await fetchServerSheetsConfig();
+        if (serverConfig?.googleSheetId) {
+          targetSheetId = serverConfig.googleSheetId;
+          setSpreadsheetId(serverConfig.googleSheetId);
+          setSpreadsheetTitle(serverConfig.sheetTitle || 'RestoFlow - Hoja Principal');
+          setSpreadsheetUrl(serverConfig.googleSheetUrl || `https://docs.google.com/spreadsheets/d/${serverConfig.googleSheetId}/edit`);
+          localStorage.setItem('restoflow_sheet_id', serverConfig.googleSheetId);
+          if (serverConfig.sheetTitle) {
+            localStorage.setItem('restoflow_sheet_title', serverConfig.sheetTitle);
+          }
+          setIsSheetsConnected(true);
+        }
+      } catch (e) {
+        console.warn('Server sheets config check skipped:', e);
+      }
+
+      // 2. Hydration check
+      const initialized = localStorage.getItem('restoflow_initialized');
+      if (!initialized) {
         let loadedFromSheets = false;
         const currentToken = await getAccessToken();
-        const targetSheetId = spreadsheetId || localStorage.getItem('restoflow_sheet_id');
 
-        if (currentToken && targetSheetId) {
+        if (targetSheetId) {
           try {
-            await handleSyncFromSheets(currentToken, targetSheetId);
-            loadedFromSheets = true;
+            if (currentToken) {
+              await handleSyncFromSheets(currentToken, targetSheetId);
+              loadedFromSheets = true;
+            } else {
+              await handleSyncWithoutAuth(targetSheetId);
+              loadedFromSheets = true;
+            }
           } catch (err) {
             console.warn('Initial load from Sheets failed, falling back to defaults:', err);
           }
@@ -571,11 +667,11 @@ export default function App() {
         }
 
         localStorage.setItem('restoflow_initialized', 'true');
-      };
+      }
+    };
 
-      runInitialSetup();
-    }
-  }, []);
+    runInitialSetup();
+  }, [handleSyncWithoutAuth]);
 
   // Auth Listener (preserves local state on reload; only hydrates from Sheets on very first run if not initialized)
   useEffect(() => {
@@ -597,30 +693,34 @@ export default function App() {
       },
       () => {
         setUser(null);
-        setIsSheetsConnected(false);
       }
     );
     return () => unsubscribe();
   }, [spreadsheetId]);
 
   // Transparent background synchronization at the restaurant level (every 45 seconds)
+  // Staff devices (waiters, kitchen, cashier) sync transparently without requiring Google logins!
   useEffect(() => {
     const targetSheetId = restaurantInfo.googleSheetId || spreadsheetId;
     if (!targetSheetId || restaurantInfo.autoSyncEnabled === false) return;
 
     const interval = setInterval(async () => {
       const token = await getAccessToken();
-      if (token && targetSheetId) {
+      if (token) {
         try {
           await handleSyncFromSheets(token, targetSheetId);
         } catch (e) {
-          // Silent background sync failure handling
+          // Fall back to no-auth public read
+          await handleSyncWithoutAuth(targetSheetId);
         }
+      } else {
+        // Staff device: transparent background read via GViz proxy
+        await handleSyncWithoutAuth(targetSheetId);
       }
     }, 45000);
 
     return () => clearInterval(interval);
-  }, [restaurantInfo.googleSheetId, restaurantInfo.autoSyncEnabled, spreadsheetId]);
+  }, [restaurantInfo.googleSheetId, restaurantInfo.autoSyncEnabled, spreadsheetId, handleSyncWithoutAuth]);
 
   // Real-time Push Notification Listener (SSE)
   useEffect(() => {
@@ -985,26 +1085,77 @@ export default function App() {
     audioService.playSuccessTone();
   };
 
-  // Connect existing sheet
+  // Connect existing sheet - Supports connecting via URL / ID directly without requiring individual Google login!
   const handleConnectExistingSheet = async (idOrUrl: string) => {
-    const token = await getAccessToken();
-    if (!token) {
-      await handleLogin();
-      return;
-    }
-
     const cleanId = extractSpreadsheetId(idOrUrl);
-    const details = await getSpreadsheetDetails(token, cleanId);
+    if (!cleanId) return;
 
-    setSpreadsheetId(cleanId);
-    setSpreadsheetTitle(details.properties?.title || 'Hoja de Restaurante');
-    setSpreadsheetUrl(`https://docs.google.com/spreadsheets/d/${cleanId}/edit`);
-    localStorage.setItem('restoflow_sheet_id', cleanId);
-    localStorage.setItem('restoflow_sheet_title', details.properties?.title || 'Hoja de Restaurante');
-    setIsSheetsConnected(true);
+    setIsSyncing(true);
+    try {
+      const token = await getAccessToken();
+      let sheetTitle = 'RestoFlow - Hoja de Restaurante';
 
-    await handleSyncFromSheets(token, cleanId);
-    audioService.playSuccessTone();
+      if (token) {
+        try {
+          const details = await getSpreadsheetDetails(token, cleanId);
+          sheetTitle = details.properties?.title || sheetTitle;
+        } catch (e) {
+          console.warn('Could not fetch title via OAuth, using fallback');
+        }
+      }
+
+      setSpreadsheetId(cleanId);
+      setSpreadsheetTitle(sheetTitle);
+      const sheetUrl = idOrUrl.includes('http') ? idOrUrl : `https://docs.google.com/spreadsheets/d/${cleanId}/edit`;
+      setSpreadsheetUrl(sheetUrl);
+      localStorage.setItem('restoflow_sheet_id', cleanId);
+      localStorage.setItem('restoflow_sheet_title', sheetTitle);
+      setIsSheetsConnected(true);
+
+      // Save restaurant info & central server config so all devices are updated
+      const updatedInfo = {
+        ...restaurantInfo,
+        googleSheetId: cleanId,
+        googleSheetUrl: sheetUrl,
+        autoSyncEnabled: true,
+      };
+      setRestaurantInfo(updatedInfo);
+      saveRestaurantInfo(updatedInfo);
+      saveServerSheetsConfig({
+        googleSheetUrl: sheetUrl,
+        sheetTitle,
+        autoSyncEnabled: true,
+        adminToken: token || undefined,
+      }).catch(() => {});
+
+      // Hydrate data from Sheet
+      if (token) {
+        await handleSyncFromSheets(token, cleanId);
+      } else {
+        await handleSyncWithoutAuth(cleanId);
+      }
+
+      audioService.playSuccessTone();
+      setActiveToast({
+        id: `toast-${Date.now()}`,
+        title: '¡Hoja de Google Sheets Vinculada!',
+        body: 'Hoja conectada globalmente. Todos los dispositivos de meseros y cocina sincronizan automáticamente sin pedir contraseñas.',
+        timestamp: new Date().toLocaleTimeString(),
+      });
+    } catch (err: any) {
+      console.error('Error connecting sheet:', err);
+      // Still set sheet ID so user can use it
+      setSpreadsheetId(cleanId);
+      setIsSheetsConnected(true);
+      setActiveToast({
+        id: `toast-${Date.now()}`,
+        title: 'Hoja Vinculada',
+        body: `ID ${cleanId.slice(0, 8)}... guardado. Recuerda compartirla en Google Drive como "Cualquier persona con el enlace puede leer".`,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Save new / modified Comanda (From Waiter POS)
@@ -1146,10 +1297,11 @@ export default function App() {
       }, 700);
     }
 
-    // 4. If Google Sheets is connected, append or sync row to 'Comandas' sheet!
+    // 4. If Google Sheets is connected, append row to 'Comandas' sheet!
+    const targetSheetId = restaurantInfo.googleSheetId || spreadsheetId;
     const token = await getAccessToken();
-    if (token && spreadsheetId) {
-      appendRowToGoogleSheet(token, spreadsheetId, 'Comandas', [
+    if (token && targetSheetId) {
+      appendRowToGoogleSheet(token, targetSheetId, 'Comandas', [
         newComanda.idComanda,
         newComanda.idMesa,
         JSON.stringify(newComanda.listaItems),
@@ -1157,6 +1309,21 @@ export default function App() {
         newComanda.estado,
         newComanda.timestamp,
       ]).catch((err) => console.warn('Background sheet append comanda:', err));
+    }
+    // Also dispatch to backend server proxy so staff devices record into Sheet without individual Google login!
+    if (targetSheetId) {
+      appendRowViaServer(
+        'Comandas',
+        [
+          newComanda.idComanda,
+          newComanda.idMesa,
+          JSON.stringify(newComanda.listaItems),
+          newComanda.total,
+          newComanda.estado,
+          newComanda.timestamp,
+        ],
+        targetSheetId
+      ).catch(() => {});
     }
   };
 
@@ -1631,9 +1798,10 @@ export default function App() {
     audioService.playSuccessTone();
 
     // 5. Append to Google Sheets 'Ventas' & 'Facturación'
+    const targetSheetId = restaurantInfo.googleSheetId || spreadsheetId;
     const token = await getAccessToken();
-    if (token && spreadsheetId) {
-      appendRowToGoogleSheet(token, spreadsheetId, 'Ventas', [
+    if (token && targetSheetId) {
+      appendRowToGoogleSheet(token, targetSheetId, 'Ventas', [
         newVenta.idVenta,
         newVenta.idComanda,
         newVenta.fecha,
@@ -1641,7 +1809,7 @@ export default function App() {
         newVenta.metodoPago,
       ]).catch((e) => console.warn(e));
 
-      appendRowToGoogleSheet(token, spreadsheetId, 'Facturación', [
+      appendRowToGoogleSheet(token, targetSheetId, 'Facturación', [
         newFactura.idFactura,
         newFactura.idVenta,
         newFactura.fecha,
@@ -1649,6 +1817,33 @@ export default function App() {
         newFactura.monto,
         newFactura.estado,
       ]).catch((e) => console.warn(e));
+    }
+    // Also append via server proxy so cash register records without requiring cashier Google login
+    if (targetSheetId) {
+      appendRowViaServer(
+        'Ventas',
+        [
+          newVenta.idVenta,
+          newVenta.idComanda,
+          newVenta.fecha,
+          newVenta.monto,
+          newVenta.metodoPago,
+        ],
+        targetSheetId
+      ).catch(() => {});
+
+      appendRowViaServer(
+        'Facturación',
+        [
+          newFactura.idFactura,
+          newFactura.idVenta,
+          newFactura.fecha,
+          newFactura.nitCliente,
+          newFactura.monto,
+          newFactura.estado,
+        ],
+        targetSheetId
+      ).catch(() => {});
     }
   };
 
@@ -2439,10 +2634,14 @@ export default function App() {
           saveRestaurantInfo(updated);
           if (updated.googleSheetId) {
             setSpreadsheetId(updated.googleSheetId);
+            localStorage.setItem('restoflow_global_sheet_id', updated.googleSheetId);
             localStorage.setItem('restoflow_sheet_id', updated.googleSheetId);
+            setIsSheetsConnected(true);
             getAccessToken().then((token) => {
               if (token) {
                 handleSyncFromSheets(token, updated.googleSheetId);
+              } else {
+                handleSyncWithoutAuth(updated.googleSheetId);
               }
             });
           }

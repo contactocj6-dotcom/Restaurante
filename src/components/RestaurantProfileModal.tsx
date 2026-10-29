@@ -13,6 +13,11 @@ import {
   FileText,
   ShieldCheck,
   CheckCircle,
+  CheckCircle2,
+  AlertTriangle,
+  AlertCircle,
+  HelpCircle,
+  RefreshCw,
   RotateCcw,
   Sparkles,
   ExternalLink,
@@ -31,7 +36,13 @@ import {
   DIAN_COMPANY_INFO,
   saveRestaurantInfo,
 } from '../utils/colombiaFiscal';
-import { extractSpreadsheetId } from '../services/sheetsService';
+import {
+  extractSpreadsheetId,
+  saveServerSheetsConfig,
+  fetchSheetRowsWithoutAuth,
+  validateSheetConnection,
+  SheetValidationResult,
+} from '../services/sheetsService';
 
 interface RestaurantProfileModalProps {
   isOpen: boolean;
@@ -56,8 +67,35 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
   const [formData, setFormData] = useState<DianCompanyInfo>({ ...currentInfo });
   const [showSavedToast, setShowSavedToast] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [testingSheet, setTestingSheet] = useState(false);
+  const [testResult, setTestResult] = useState<SheetValidationResult | null>(null);
 
   if (!isOpen) return null;
+
+  const handleTestSheetConnection = async () => {
+    if (!formData.googleSheetId) return;
+    setTestingSheet(true);
+    setTestResult(null);
+    try {
+      const result = await validateSheetConnection(formData.googleSheetId);
+      setTestResult(result);
+      if (result.valid) {
+        // Automatically ensure this validated ID is saved to localStorage for convenience
+        localStorage.setItem('restoflow_global_sheet_id', result.cleanId);
+        localStorage.setItem('restoflow_sheet_id', result.cleanId);
+      }
+    } catch (err: any) {
+      setTestResult({
+        status: 'error',
+        valid: false,
+        cleanId: formData.googleSheetId || '',
+        message: 'Error al contactar con el servicio de validación de Google Sheets',
+        details: err?.message || String(err),
+      });
+    } finally {
+      setTestingSheet(false);
+    }
+  };
 
   const handleChange = (field: keyof DianCompanyInfo, value: string | number) => {
     setFormData((prev) => ({
@@ -68,9 +106,24 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    if (formData.googleSheetId) {
+      const cleanId = extractSpreadsheetId(formData.googleSheetId);
+      localStorage.setItem('restoflow_global_sheet_id', cleanId);
+      localStorage.setItem('restoflow_sheet_id', cleanId);
+      saveServerSheetsConfig({
+        googleSheetUrl: formData.googleSheetUrl || cleanId,
+        sheetTitle: formData.nombreComercial || 'RestoFlow - Hoja Principal',
+        autoSyncEnabled: formData.autoSyncEnabled !== false,
+      }).catch(() => {});
+    }
     if (!isAdmin) {
       if (onRequireAdminAuth) {
         onRequireAdminAuth(() => {
+          if (formData.googleSheetId) {
+            const cleanId = extractSpreadsheetId(formData.googleSheetId);
+            localStorage.setItem('restoflow_global_sheet_id', cleanId);
+            localStorage.setItem('restoflow_sheet_id', cleanId);
+          }
           saveRestaurantInfo(formData);
           onSave(formData);
           setShowSavedToast(true);
@@ -238,7 +291,7 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
             }`}
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
-            <span>Google Sheets & Nube</span>
+            <span>Google Sheets (ID Global)</span>
           </button>
 
           <button
@@ -752,107 +805,340 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
               </div>
             )}
 
-            {/* TAB: GOOGLE SHEETS & SINCRONIZACIÓN TRANSPARENTE DEL RESTAURANTE */}
+            {/* TAB: SECCIÓN ESPECIAL GOOGLE SHEETS & ID GLOBAL (EXCLUSIVO ADMINISTRADOR) */}
             {activeTab === 'sheets' && (
               <div className="space-y-6 animate-in fade-in">
-                {/* Banner Informativo sobre Sincronización Transparente */}
-                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-start gap-3.5">
-                  <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
-                    <FileSpreadsheet className="w-5 h-5" />
+                {/* Special Section Header */}
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-500/15 via-amber-500/10 to-indigo-500/10 border border-emerald-500/30 flex items-start gap-3.5">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0 shadow-sm">
+                    <ShieldCheck className="w-6 h-6" />
                   </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-emerald-300">
-                      Sincronización Transparente a Nivel de Restaurante
-                    </h4>
-                    <p className="text-xs text-zinc-300 mt-1 leading-relaxed">
-                      Esta configuración es global del establecimiento. Al vincular aquí la hoja de Google Sheets, 
-                      <strong> todos los dispositivos de tu restaurante</strong> (celulares de los meseros, tablets de cocina, pantallas de caja) 
-                      se comunicarán y sincronizarán en segundo plano automáticamente, 
-                      sin que cada usuario tenga que configurar o autorizar manualmente en cada dispositivo.
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-black text-white tracking-tight">
+                        Sección Especial: ID Global de Hoja de Cálculo
+                      </h4>
+                      <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                        <Lock className="w-2.5 h-2.5" /> Exclusivo Administrador
+                      </span>
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-300 border border-zinc-700">
+                        key: restoflow_global_sheet_id
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-300 leading-relaxed">
+                      Configura el ID de la Hoja de Cálculo de tu restaurante <strong>una sola vez</strong>. Se guardará de manera permanente en <code className="bg-zinc-800 px-1 py-0.5 rounded text-amber-300 font-mono">restaurantInfo</code> y en el almacenamiento local <code className="bg-zinc-800 px-1 py-0.5 rounded text-amber-300 font-mono">restoflow_global_sheet_id</code> para que <strong>todos los meseros, cocineros y cajeros sincronicen automáticamente sin tener que iniciar sesión con Google</strong>.
                     </p>
                   </div>
                 </div>
 
-                {/* ID o Enlace de la Hoja */}
-                <div className="bg-zinc-950/60 border border-zinc-800 rounded-2xl p-4 space-y-4">
+                {/* Non-Admin Locked State Warning */}
+                {!isAdmin && (
+                  <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-300">
+                    <div className="flex items-center gap-2.5">
+                      <Lock className="w-5 h-5 text-amber-400 shrink-0" />
+                      <span>
+                        Esta sección solo puede ser configurada o modificada por un usuario con rol de <strong>Administrador</strong>.
+                      </span>
+                    </div>
+                    {onRequireAdminAuth && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onRequireAdminAuth(() => {}, 'Modificar ID Global de Google Sheets')
+                        }
+                        className="px-3 py-1.5 rounded-xl bg-amber-500 text-zinc-950 font-bold text-xs shrink-0 hover:bg-amber-400 transition shadow-sm"
+                      >
+                        Ingresar PIN de Administrador
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* ID Input Card */}
+                <div className="bg-zinc-950/70 border border-zinc-800 rounded-2xl p-4 sm:p-5 space-y-4 shadow-lg">
                   <div>
-                    <label className="block text-xs font-semibold text-amber-400 mb-1.5 flex items-center justify-between">
+                    <label className="block text-xs font-bold text-amber-400 mb-1.5 flex items-center justify-between">
                       <span className="flex items-center gap-1.5">
                         <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                        ID o URL de Google Sheets del Restaurante
+                        ID Global de Google Sheets del Restaurante
                       </span>
                       {formData.googleSheetId && (
-                        <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                        <span className="text-[10px] text-emerald-400 font-mono bg-emerald-500/15 px-2.5 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                          <CheckCircle className="w-3 h-3" />
                           ID Activo: {formData.googleSheetId.slice(0, 8)}...{formData.googleSheetId.slice(-6)}
                         </span>
                       )}
                     </label>
-                    <input
-                      type="text"
-                      disabled={!isAdmin}
-                      value={formData.googleSheetId || ''}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        const cleaned = extractSpreadsheetId(raw);
-                        setFormData((prev) => ({
-                          ...prev,
-                          googleSheetId: cleaned,
-                          googleSheetUrl: raw.includes('http') ? raw : `https://docs.google.com/spreadsheets/d/${cleaned}/edit`,
-                        }));
-                      }}
-                      placeholder="Pega aquí el enlace de tu Google Sheet (ej. https://docs.google.com/spreadsheets/d/1BxiM.../edit) o solo su ID"
-                      className="w-full bg-zinc-900 border border-zinc-700/80 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white font-mono focus:outline-none focus:border-amber-500 disabled:opacity-60"
-                    />
-                    <p className="text-[11px] text-zinc-400 mt-1.5 leading-normal">
-                      Puedes pegar la URL completa del navegador o únicamente el ID alfanumérico. El sistema lo detectará automáticamente.
+
+                    <div className="relative">
+                      <input
+                        type="text"
+                        disabled={!isAdmin}
+                        value={formData.googleSheetId || ''}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const cleaned = extractSpreadsheetId(raw);
+                          setFormData((prev) => ({
+                            ...prev,
+                            googleSheetId: cleaned,
+                            googleSheetUrl: raw.includes('http')
+                              ? raw
+                              : `https://docs.google.com/spreadsheets/d/${cleaned}/edit`,
+                          }));
+                          setTestResult(null);
+                        }}
+                        placeholder="Pega aquí el ID (ej: 1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms) o la URL completa del navegador"
+                        className="w-full bg-zinc-900 border border-zinc-700/80 rounded-xl px-4 py-3 text-xs sm:text-sm text-white font-mono focus:outline-none focus:border-amber-500 disabled:opacity-50 shadow-inner"
+                      />
+                    </div>
+                    <p className="text-[11px] text-zinc-400 mt-2 leading-relaxed">
+                      💡 <strong>Fácil y práctico:</strong> Puedes pegar la dirección web completa que ves en la barra de tu navegador (ej. <em>https://docs.google.com/spreadsheets/d/.../edit</em>) o directamente el código alfanumérico. El sistema extraerá el ID automáticamente.
                     </p>
                   </div>
 
-                  {/* Acciones de la Hoja */}
-                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-zinc-800/80">
-                    {formData.googleSheetId && (
-                      <a
-                        href={formData.googleSheetUrl || `https://docs.google.com/spreadsheets/d/${formData.googleSheetId}/edit`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-emerald-400 border border-zinc-700 text-xs font-semibold transition"
-                      >
-                        <LinkIcon className="w-3.5 h-3.5" />
-                        <span>Abrir Hoja en Google Sheets</span>
-                      </a>
-                    )}
+                  {/* Test Connection Button & Result */}
+                  <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-zinc-800/80">
+                    <button
+                      type="button"
+                      disabled={!formData.googleSheetId || testingSheet}
+                      onClick={handleTestSheetConnection}
+                      className="px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 text-xs font-bold transition flex items-center justify-center gap-2 disabled:opacity-50 shadow-md shadow-amber-500/10 cursor-pointer"
+                    >
+                      {testingSheet ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin text-zinc-950" />
+                          <span>Validando Estado de Conexión...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 text-zinc-950" />
+                          <span>Validar Conexión</span>
+                        </>
+                      )}
+                    </button>
 
-                    {/* Copiar enlace directo con parámetro para nuevos dispositivos */}
-                    {formData.googleSheetId && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const url = `${window.location.origin}${window.location.pathname}?sheet=${formData.googleSheetId}`;
-                          navigator.clipboard.writeText(url);
-                          setCopiedLink(true);
-                          setTimeout(() => setCopiedLink(false), 2500);
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-semibold transition"
-                        title="Copia el enlace directo configurado con la hoja para abrir RestoFlow en celulares de meseros o tablets"
-                      >
-                        {copiedLink ? (
-                          <>
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
-                            <span className="text-emerald-400">¡Enlace de Sucursal Copiado!</span>
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="w-3.5 h-3.5 text-amber-400" />
-                            <span>Copiar Enlace para Dispositivos</span>
-                          </>
-                        )}
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {formData.googleSheetId && (
+                        <a
+                          href={formData.googleSheetUrl || `https://docs.google.com/spreadsheets/d/${formData.googleSheetId}/edit`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-emerald-400 border border-zinc-700 text-xs font-semibold transition"
+                        >
+                          <LinkIcon className="w-3.5 h-3.5" />
+                          <span>Abrir en Google Drive</span>
+                        </a>
+                      )}
+
+                      {formData.googleSheetId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const url = `${window.location.origin}${window.location.pathname}?sheet=${formData.googleSheetId}`;
+                            navigator.clipboard.writeText(url);
+                            setCopiedLink(true);
+                            setTimeout(() => setCopiedLink(false), 2500);
+                          }}
+                          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 text-xs font-semibold transition cursor-pointer"
+                          title="Copia el enlace directo para abrir RestoFlow en celulares de meseros ya configurado con la hoja"
+                        >
+                          {copiedLink ? (
+                            <>
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              <span className="text-emerald-400">¡Enlace Copiado!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Copiar Enlace para Meseros</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
                   </div>
+
+                  {/* MENSAJES DE ESTADO DE LA CONEXIÓN */}
+                  {testResult ? (
+                    <div className="space-y-3 animate-in fade-in pt-1">
+                      {/* ESTADO 1: CONEXIÓN ACTIVA Y VERIFICADA */}
+                      {testResult.status === 'active' && (
+                        <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/60 to-emerald-900/30 border border-emerald-500/50 text-emerald-100 space-y-3 shadow-lg shadow-emerald-950/20">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
+                                <CheckCircle2 className="w-5 h-5" />
+                              </div>
+                              <div>
+                                <h5 className="text-sm font-black text-emerald-200 flex items-center gap-2">
+                                  Conexión Activa y Verificada
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    🟢 Estado: Óptimo
+                                  </span>
+                                </h5>
+                                <p className="text-xs text-emerald-300/90 mt-0.5">
+                                  {testResult.details || testResult.message}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1 border-t border-emerald-500/20">
+                            <div className="flex items-center gap-2 text-emerald-200">
+                              <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span>
+                                {testResult.menuRowsCount !== undefined
+                                  ? `Menú: ${testResult.menuRowsCount} filas leídas`
+                                  : 'Lectura pública confirmada'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-emerald-200">
+                              <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span>Meseros y cocina sincronizarán sin pedir login</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ESTADO 2: REQUIERE PERMISOS DE LECTURA */}
+                      {testResult.status === 'needs_permission' && (
+                        <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-amber-950/70 via-amber-900/40 to-zinc-950 border border-amber-500/60 text-amber-100 space-y-3.5 shadow-xl">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+                              <AlertTriangle className="w-6 h-6 text-amber-400 animate-pulse" />
+                            </div>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h5 className="text-sm font-black text-amber-300">
+                                  Requiere Permisos de Lectura en Google Drive
+                                </h5>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                  🟡 Hoja Privada / Restringida
+                                </span>
+                              </div>
+                              <p className="text-xs text-amber-200/90 leading-relaxed">
+                                La hoja fue encontrada en Google Drive, pero actualmente solo su propietario tiene acceso. Para que la app funcione de forma transparente en todos los dispositivos sin pedir inicio de sesión individual, habilita el acceso general de lectura:
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Guía paso a paso */}
+                          <div className="bg-zinc-950/80 rounded-xl p-3 sm:p-4 border border-amber-500/25 space-y-2.5 text-xs text-zinc-300">
+                            <div className="font-bold text-amber-400 text-xs flex items-center gap-1.5">
+                              <HelpCircle className="w-4 h-4" />
+                              Pasos para habilitar en 30 segundos:
+                            </div>
+
+                            <ol className="space-y-2 pl-1 list-none">
+                              <li className="flex items-start gap-2">
+                                <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 font-bold flex items-center justify-center shrink-0 text-[11px] border border-amber-500/30">
+                                  1
+                                </span>
+                                <div>
+                                  Abre tu hoja haciendo clic en{' '}
+                                  <a
+                                    href={formData.googleSheetUrl || `https://docs.google.com/spreadsheets/d/${formData.googleSheetId}/edit`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-amber-400 underline font-semibold inline-flex items-center gap-1 hover:text-amber-300"
+                                  >
+                                    Abrir en Google Drive <LinkIcon className="w-3 h-3" />
+                                  </a>
+                                </div>
+                              </li>
+
+                              <li className="flex items-start gap-2">
+                                <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 font-bold flex items-center justify-center shrink-0 text-[11px] border border-amber-500/30">
+                                  2
+                                </span>
+                                <div>
+                                  En la esquina superior derecha, haz clic en el botón verde o azul <strong className="text-white">"Compartir"</strong>.
+                                </div>
+                              </li>
+
+                              <li className="flex items-start gap-2">
+                                <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 font-bold flex items-center justify-center shrink-0 text-[11px] border border-amber-500/30">
+                                  3
+                                </span>
+                                <div>
+                                  En la sección <strong className="text-white">"Acceso general"</strong>, cambia de <em>"Restringido"</em> a <strong className="text-emerald-400">"Cualquier persona que tenga el vínculo"</strong>.
+                                </div>
+                              </li>
+
+                              <li className="flex items-start gap-2">
+                                <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-300 font-bold flex items-center justify-center shrink-0 text-[11px] border border-amber-500/30">
+                                  4
+                                </span>
+                                <div>
+                                  Verifica que el rol a la derecha diga <strong className="text-white">"Lector"</strong> y haz clic en <strong className="text-white">"Listo"</strong>.
+                                </div>
+                              </li>
+                            </ol>
+
+                            <div className="pt-2 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={handleTestSheetConnection}
+                                disabled={testingSheet}
+                                className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs flex items-center gap-1.5 transition cursor-pointer"
+                              >
+                                <RefreshCw className={`w-3.5 h-3.5 ${testingSheet ? 'animate-spin' : ''}`} />
+                                <span>Reintentar Validación</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ESTADO 3: NO ENCONTRADA / ID INVÁLIDO */}
+                      {(testResult.status === 'not_found' || testResult.status === 'invalid' || testResult.status === 'error') && (
+                        <div className="p-4 rounded-2xl bg-rose-950/50 border border-rose-500/50 text-rose-100 space-y-2">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 rounded-xl bg-rose-500/20 text-rose-400 shrink-0">
+                              <AlertCircle className="w-5 h-5" />
+                            </div>
+                            <div className="space-y-0.5">
+                              <h5 className="text-sm font-black text-rose-300">
+                                {testResult.status === 'not_found'
+                                  ? 'Hoja de Cálculo No Encontrada'
+                                  : testResult.status === 'invalid'
+                                  ? 'ID o Enlace No Válido'
+                                  : 'Error de Conexión'}
+                              </h5>
+                              <p className="text-xs text-rose-200/90">
+                                {testResult.details || testResult.message}
+                              </p>
+                              <p className="text-[11px] text-zinc-400 pt-1">
+                                💡 Tip: Abre la hoja en tu navegador y copia la dirección completa desde la barra de direcciones (ej: <code className="text-rose-300">https://docs.google.com/spreadsheets/d/.../edit</code>).
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    formData.googleSheetId && (
+                      <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 text-xs text-zinc-400 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <HelpCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                          <span>
+                            Presiona <strong>"Validar Conexión"</strong> para comprobar si la hoja está activa o si requiere permisos de lectura.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleTestSheetConnection}
+                          className="px-3 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold shrink-0 transition"
+                        >
+                          Comprobar Ahora
+                        </button>
+                      </div>
+                    )
+                  )}
                 </div>
 
                 {/* Sincronización Automática en Segundo Plano */}
-                <div className="bg-zinc-950/60 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between gap-4">
+                <div className="bg-zinc-950/60 border border-zinc-800 rounded-2xl p-4 flex items-center justify-between gap-4 shadow-sm">
                   <div className="space-y-0.5">
                     <div className="flex items-center gap-2">
                       <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
@@ -860,11 +1146,11 @@ export const RestaurantProfileModal: React.FC<RestaurantProfileModalProps> = ({
                         Sincronización Automática Continua
                       </span>
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-                        Recomendado
+                        Activa
                       </span>
                     </div>
                     <p className="text-[11px] text-zinc-400">
-                      Sincroniza silenciosamente en segundo plano cada 45 segundos y ante cada comanda o factura, manteniendo mesas y ventas actualizadas en todos los dispositivos.
+                      Sincroniza silenciosamente en segundo plano cada 45 segundos utilizando el ID global de la hoja, manteniendo mesas, comandas y ventas sincronizadas en todos los dispositivos sin pedir contraseñas.
                     </p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer shrink-0">

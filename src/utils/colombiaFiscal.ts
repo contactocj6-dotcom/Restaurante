@@ -91,10 +91,20 @@ export const RESTAURANT_INFO_STORAGE_KEY = 'restoflow_restaurant_info';
 export function getSavedRestaurantInfo(): DianCompanyInfo {
   if (typeof window === 'undefined') return DIAN_COMPANY_INFO;
   try {
+    const globalSheetId = localStorage.getItem('restoflow_global_sheet_id') || '';
     const saved = localStorage.getItem(RESTAURANT_INFO_STORAGE_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      return { ...DIAN_COMPANY_INFO, ...parsed };
+      return {
+        ...DIAN_COMPANY_INFO,
+        ...parsed,
+        googleSheetId: parsed.googleSheetId || globalSheetId,
+      };
+    } else if (globalSheetId) {
+      return {
+        ...DIAN_COMPANY_INFO,
+        googleSheetId: globalSheetId,
+      };
     }
   } catch (err) {
     console.error('Error al recuperar información del restaurante desde localStorage:', err);
@@ -104,9 +114,13 @@ export function getSavedRestaurantInfo(): DianCompanyInfo {
 
 /**
  * Guarda la información del restaurante en localStorage y despacha un evento para reactividad global.
+ * Persiste también el ID global de la hoja en restoflow_global_sheet_id.
  */
 export function saveRestaurantInfo(info: DianCompanyInfo): void {
   try {
+    if (info.googleSheetId) {
+      localStorage.setItem('restoflow_global_sheet_id', info.googleSheetId);
+    }
     localStorage.setItem(RESTAURANT_INFO_STORAGE_KEY, JSON.stringify(info));
     if (typeof window !== 'undefined') {
       window.dispatchEvent(

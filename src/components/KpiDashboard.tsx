@@ -15,6 +15,11 @@ import {
   Sparkles,
   BarChart3,
   ArrowUpRight,
+  Utensils,
+  UtensilsCrossed,
+  Crown,
+  ShoppingBag,
+  Package,
 } from 'lucide-react';
 import {
   BarChart,
@@ -58,6 +63,7 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
 }) => {
   const [timeRange, setTimeRange] = useState<'today' | 'week' | 'all'>('today');
   const [barMetric, setBarMetric] = useState<'monto' | 'pedidos'>('monto');
+  const [topSellingMetric, setTopSellingMetric] = useState<'unidades' | 'ingresos'>('unidades');
 
   // 1. KPI: Tiempo Promedio de Atención
   const turnaroundMetrics = useMemo(() => {
@@ -224,7 +230,183 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
     return null;
   };
 
-  // 4. KPI: Volumen de Ventas Diario de la Última Semana (7 Días) - Datos Reales Exclusivamente
+  // 4. KPI: Estadísticas Rápidas & Top 5 Platos Más Vendidos (Calculado con comandas y ventas)
+  const quickStatsData = useMemo(() => {
+    const itemMap = new Map<
+      string,
+      {
+        id: string;
+        nombre: string;
+        categoria: string;
+        precio: number;
+        unidadesVendidas: number;
+        totalRecaudado: number;
+        pedidosCount: number;
+        imagen?: string;
+      }
+    >();
+
+    // Helper para filtrar por el período seleccionado en el Dashboard
+    const matchesFilter = (timestamp?: string) => {
+      if (!timestamp || timeRange === 'all') return true;
+      const d = new Date(timestamp);
+      if (isNaN(d.getTime())) return true;
+      const now = new Date();
+      if (timeRange === 'today') {
+        return d.toDateString() === now.toDateString();
+      }
+      if (timeRange === 'week') {
+        const diffDays = (now.getTime() - d.getTime()) / (1000 * 3600 * 24);
+        return diffDays <= 7;
+      }
+      return true;
+    };
+
+    // Procesamos comandas que coincidan con el filtro
+    const relevantComandas = comandas.filter((c) => matchesFilter(c.timestamp));
+    const processedComandaIds = new Set<string>();
+
+    relevantComandas.forEach((c) => {
+      processedComandaIds.add(c.idComanda);
+      let items: any[] = [];
+      if (Array.isArray(c.listaItems)) {
+        items = c.listaItems;
+      } else if (typeof c.listaItems === 'string') {
+        try {
+          items = JSON.parse(c.listaItems);
+        } catch {
+          items = [];
+        }
+      }
+
+      items.forEach((it) => {
+        if (!it) return;
+        const key = (it.menuId || it.nombre || '').trim();
+        if (!key) return;
+
+        const menuItem = menu.find(
+          (m) =>
+            m.id === it.menuId ||
+            m.nombre.toLowerCase().trim() === (it.nombre || '').toLowerCase().trim()
+        );
+
+        const qty = Math.max(1, Number(it.cantidad) || 1);
+        const unitPrice = Number(it.precio) || Number(menuItem?.precio) || 0;
+        const subtotal = unitPrice * qty;
+
+        const existing = itemMap.get(key);
+        if (existing) {
+          existing.unidadesVendidas += qty;
+          existing.totalRecaudado += subtotal;
+          existing.pedidosCount += 1;
+        } else {
+          itemMap.set(key, {
+            id: it.menuId || key,
+            nombre: it.nombre || menuItem?.nombre || 'Plato',
+            categoria: menuItem?.categoria || 'General',
+            precio: unitPrice,
+            unidadesVendidas: qty,
+            totalRecaudado: subtotal,
+            pedidosCount: 1,
+            imagen: menuItem?.imagen,
+          });
+        }
+      });
+    });
+
+    // Procesamos ventas que tengan comandas no procesadas aún
+    const relevantVentas = ventas.filter((v) => matchesFilter(v.fecha));
+    relevantVentas.forEach((v) => {
+      if (v.idComanda && !processedComandaIds.has(v.idComanda)) {
+        const matchingComanda = comandas.find((c) => c.idComanda === v.idComanda);
+        if (matchingComanda) {
+          processedComandaIds.add(matchingComanda.idComanda);
+          let items: any[] = [];
+          if (Array.isArray(matchingComanda.listaItems)) {
+            items = matchingComanda.listaItems;
+          } else if (typeof matchingComanda.listaItems === 'string') {
+            try {
+              items = JSON.parse(matchingComanda.listaItems);
+            } catch {
+              items = [];
+            }
+          }
+
+          items.forEach((it) => {
+            if (!it) return;
+            const key = (it.menuId || it.nombre || '').trim();
+            if (!key) return;
+
+            const menuItem = menu.find(
+              (m) =>
+                m.id === it.menuId ||
+                m.nombre.toLowerCase().trim() === (it.nombre || '').toLowerCase().trim()
+            );
+
+            const qty = Math.max(1, Number(it.cantidad) || 1);
+            const unitPrice = Number(it.precio) || Number(menuItem?.precio) || 0;
+            const subtotal = unitPrice * qty;
+
+            const existing = itemMap.get(key);
+            if (existing) {
+              existing.unidadesVendidas += qty;
+              existing.totalRecaudado += subtotal;
+              existing.pedidosCount += 1;
+            } else {
+              itemMap.set(key, {
+                id: it.menuId || key,
+                nombre: it.nombre || menuItem?.nombre || 'Plato',
+                categoria: menuItem?.categoria || 'General',
+                precio: unitPrice,
+                unidadesVendidas: qty,
+                totalRecaudado: subtotal,
+                pedidosCount: 1,
+                imagen: menuItem?.imagen,
+              });
+            }
+          });
+        }
+      }
+    });
+
+    const allDishes = Array.from(itemMap.values());
+    const totalUnidades = allDishes.reduce((sum, d) => sum + d.unidadesVendidas, 0);
+    const totalRecaudado = allDishes.reduce((sum, d) => sum + d.totalRecaudado, 0);
+
+    // Ordenar según la métrica seleccionada (unidades o ingresos)
+    const sorted = [...allDishes].sort((a, b) => {
+      if (topSellingMetric === 'unidades') {
+        return b.unidadesVendidas - a.unidadesVendidas || b.totalRecaudado - a.totalRecaudado;
+      } else {
+        return b.totalRecaudado - a.totalRecaudado || b.unidadesVendidas - a.unidadesVendidas;
+      }
+    });
+
+    const top5 = sorted.slice(0, 5).map((d, idx) => ({
+      ...d,
+      rank: idx + 1,
+      porcentaje: totalUnidades > 0 ? Math.round((d.unidadesVendidas / totalUnidades) * 100) : 0,
+      porcentajeRecaudado:
+        totalRecaudado > 0 ? Math.round((d.totalRecaudado / totalRecaudado) * 100) : 0,
+    }));
+
+    const maxUnits = top5.length > 0 ? Math.max(...top5.map((d) => d.unidadesVendidas), 1) : 1;
+    const maxRevenue = top5.length > 0 ? Math.max(...top5.map((d) => d.totalRecaudado), 1) : 1;
+
+    return {
+      top5,
+      totalUnidades,
+      totalRecaudado,
+      totalVariedades: allDishes.length,
+      platoEstrella: top5[0] || null,
+      maxUnits,
+      maxRevenue,
+      totalComandasProcesadas: processedComandaIds.size,
+      totalVentasProcesadas: relevantVentas.length,
+    };
+  }, [comandas, ventas, menu, timeRange, topSellingMetric]);
+
+  // 5. KPI: Volumen de Ventas Diario de la Última Semana (7 Días) - Datos Reales Exclusivamente
   const last7DaysSalesData = useMemo(() => {
     const days: {
       dateStr: string;
@@ -524,6 +706,283 @@ export const KpiDashboard: React.FC<KpiDashboardProps> = ({
             </div>
           </div>
         </div>
+      </div>
+
+      {/* SECCIÓN: ESTADÍSTICAS RÁPIDAS - TOP 5 PLATOS MÁS VENDIDOS */}
+      <div className="p-6 rounded-3xl bg-zinc-900/90 border border-zinc-800 shadow-2xl space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-zinc-800/80">
+          <div className="flex items-center gap-3">
+            <div className="p-3 rounded-2xl bg-gradient-to-tr from-amber-500/20 to-orange-500/20 border border-amber-500/30 text-amber-400 shadow-inner">
+              <UtensilsCrossed className="w-6 h-6" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
+                  Estadísticas Rápidas: Top 5 de Platos Más Vendidos
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> Basado en Comandas & Ventas
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-0.5">
+                Ranking de demanda de la carta en tiempo real según unidades despachadas y facturación generada
+              </p>
+            </div>
+          </div>
+
+          {/* Metric Selector Toggle (Unidades vs Ingresos) */}
+          <div className="flex items-center gap-1.5 bg-zinc-950 p-1.5 rounded-xl border border-zinc-800 text-xs self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setTopSellingMetric('unidades')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                topSellingMetric === 'unidades'
+                  ? 'bg-amber-500 text-zinc-950 shadow-md'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Package className="w-3.5 h-3.5" />
+              <span>Por Unidades</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setTopSellingMetric('ingresos')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                topSellingMetric === 'ingresos'
+                  ? 'bg-emerald-500 text-zinc-950 shadow-md'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              <span>Por Facturación</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 4 Mini KPI Chips */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
+          {/* Card 1: Plato Estrella */}
+          <div className="p-4 rounded-2xl bg-zinc-950/70 border border-zinc-800/80 space-y-1.5 shadow-sm">
+            <div className="flex items-center justify-between text-xs text-zinc-400">
+              <span className="font-semibold flex items-center gap-1.5">
+                <Crown className="w-4 h-4 text-amber-400" /> Plato Estrella (#1)
+              </span>
+              <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                Top 1
+              </span>
+            </div>
+            <div className="font-black text-white text-sm sm:text-base truncate" title={quickStatsData.platoEstrella?.nombre || 'Sin ventas aún'}>
+              {quickStatsData.platoEstrella ? quickStatsData.platoEstrella.nombre : 'Sin pedidos'}
+            </div>
+            <div className="text-[11px] text-zinc-400 font-mono flex items-center justify-between">
+              <span>{quickStatsData.platoEstrella ? `${quickStatsData.platoEstrella.unidadesVendidas} unidades` : 'Esperando comandas'}</span>
+              <span className="text-emerald-400 font-bold">{quickStatsData.platoEstrella ? formatCOP(quickStatsData.platoEstrella.totalRecaudado) : ''}</span>
+            </div>
+          </div>
+
+          {/* Card 2: Total Unidades Vendidas */}
+          <div className="p-4 rounded-2xl bg-zinc-950/70 border border-zinc-800/80 space-y-1.5 shadow-sm">
+            <div className="flex items-center justify-between text-xs text-zinc-400">
+              <span className="font-semibold flex items-center gap-1.5">
+                <ShoppingBag className="w-4 h-4 text-emerald-400" /> Platos Servidos
+              </span>
+              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                Volumen
+              </span>
+            </div>
+            <div className="font-black text-white text-base sm:text-lg font-mono">
+              {quickStatsData.totalUnidades} <span className="text-xs text-zinc-400 font-normal">unidades</span>
+            </div>
+            <div className="text-[11px] text-zinc-400 font-mono">
+              En {quickStatsData.totalComandasProcesadas} comandas procesadas
+            </div>
+          </div>
+
+          {/* Card 3: Recaudación en Platos */}
+          <div className="p-4 rounded-2xl bg-zinc-950/70 border border-zinc-800/80 space-y-1.5 shadow-sm">
+            <div className="flex items-center justify-between text-xs text-zinc-400">
+              <span className="font-semibold flex items-center gap-1.5">
+                <DollarSign className="w-4 h-4 text-blue-400" /> Facturación Menú
+              </span>
+              <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded">
+                Recaudado
+              </span>
+            </div>
+            <div className="font-black text-emerald-400 text-base sm:text-lg font-mono">
+              {formatCOP(quickStatsData.totalRecaudado)}
+            </div>
+            <div className="text-[11px] text-zinc-400 font-mono">
+              {quickStatsData.totalVentasProcesadas} ventas cobradas en caja
+            </div>
+          </div>
+
+          {/* Card 4: Variedad en Demanda */}
+          <div className="p-4 rounded-2xl bg-zinc-950/70 border border-zinc-800/80 space-y-1.5 shadow-sm">
+            <div className="flex items-center justify-between text-xs text-zinc-400">
+              <span className="font-semibold flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-indigo-400" /> Variedades Pedidas
+              </span>
+              <span className="text-[10px] font-bold text-indigo-400 bg-indigo-500/10 px-1.5 py-0.5 rounded">
+                Carta
+              </span>
+            </div>
+            <div className="font-black text-white text-base sm:text-lg font-mono">
+              {quickStatsData.totalVariedades} <span className="text-xs text-zinc-400 font-normal">de {menu.length} platos</span>
+            </div>
+            <div className="text-[11px] text-zinc-400 font-mono">
+              {menu.length > 0 ? `${Math.round((quickStatsData.totalVariedades / menu.length) * 100)}% de rotación en carta` : 'Menú activo'}
+            </div>
+          </div>
+        </div>
+
+        {/* Top 5 Dishes Listing & Progress Bars */}
+        {quickStatsData.top5.length > 0 ? (
+          <div className="space-y-3">
+            <div className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center justify-between">
+              <span>Ranking de los 5 Platos con Mayor Demanda</span>
+              <span className="text-[11px] text-zinc-500 font-normal">
+                Ordenado por {topSellingMetric === 'unidades' ? 'unidades despachadas' : 'facturación total'}
+              </span>
+            </div>
+
+            <div className="space-y-2.5">
+              {quickStatsData.top5.map((dish) => {
+                const isFirst = dish.rank === 1;
+                const isSecond = dish.rank === 2;
+                const isThird = dish.rank === 3;
+
+                const relativeWidth =
+                  topSellingMetric === 'unidades'
+                    ? Math.max(12, Math.round((dish.unidadesVendidas / quickStatsData.maxUnits) * 100))
+                    : Math.max(12, Math.round((dish.totalRecaudado / quickStatsData.maxRevenue) * 100));
+
+                return (
+                  <div
+                    key={dish.id}
+                    className={`p-3.5 sm:p-4 rounded-2xl border transition-all hover:border-zinc-700 bg-zinc-950/60 ${
+                      isFirst
+                        ? 'border-amber-500/40 bg-gradient-to-r from-amber-950/20 via-zinc-950/60 to-zinc-950/60'
+                        : isSecond
+                        ? 'border-zinc-700/80'
+                        : isThird
+                        ? 'border-amber-900/40'
+                        : 'border-zinc-800/80'
+                    }`}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      {/* Left: Rank + Name + Category + Price */}
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Rank Badge */}
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shrink-0 shadow-sm ${
+                            isFirst
+                              ? 'bg-amber-500 text-zinc-950 shadow-amber-500/20'
+                              : isSecond
+                              ? 'bg-zinc-700 text-zinc-100'
+                              : isThird
+                              ? 'bg-amber-800/80 text-amber-200'
+                              : 'bg-zinc-800 text-zinc-400'
+                          }`}
+                        >
+                          {isFirst ? '🥇 #1' : isSecond ? '🥈 #2' : isThird ? '🥉 #3' : `#${dish.rank}`}
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-white text-sm sm:text-base tracking-tight truncate">
+                              {dish.nombre}
+                            </span>
+                            {isFirst && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                                <Crown className="w-3 h-3" /> Favorito
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-zinc-400 mt-0.5">
+                            <span className="px-2 py-0.5 rounded-md bg-zinc-900 text-zinc-300 font-medium text-[11px] border border-zinc-800">
+                              {dish.categoria}
+                            </span>
+                            <span>•</span>
+                            <span className="font-mono text-zinc-300 font-semibold">
+                              {formatCOP(dish.precio)} / ud
+                            </span>
+                            <span className="hidden sm:inline">•</span>
+                            <span className="hidden sm:inline text-zinc-500">
+                              {dish.pedidosCount} pedidos
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right: Metrics Numbers */}
+                      <div className="flex items-center justify-between sm:justify-end gap-5 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-zinc-800/80">
+                        <div className="text-left sm:text-right">
+                          <span className="block text-[11px] text-zinc-500 uppercase font-bold tracking-wider">
+                            Unidades
+                          </span>
+                          <span className="font-mono font-black text-amber-400 text-sm sm:text-base">
+                            {dish.unidadesVendidas}{' '}
+                            <span className="text-xs text-zinc-400 font-normal">uds</span>
+                          </span>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="block text-[11px] text-zinc-500 uppercase font-bold tracking-wider">
+                            Facturación
+                          </span>
+                          <span className="font-mono font-black text-emerald-400 text-sm sm:text-base">
+                            {formatCOP(dish.totalRecaudado)}
+                          </span>
+                        </div>
+
+                        <div className="text-right min-w-[50px] hidden sm:block">
+                          <span className="block text-[11px] text-zinc-500 uppercase font-bold tracking-wider">
+                            Cuota
+                          </span>
+                          <span className="font-mono font-bold text-zinc-300 text-xs">
+                            {topSellingMetric === 'unidades' ? `${dish.porcentaje}%` : `${dish.porcentajeRecaudado}%`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="mt-3 w-full bg-zinc-900/80 rounded-full h-2 overflow-hidden border border-zinc-800/60">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isFirst
+                            ? 'bg-gradient-to-r from-amber-500 to-orange-400 shadow-sm shadow-amber-500/50'
+                            : isSecond
+                            ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
+                            : isThird
+                            ? 'bg-gradient-to-r from-cyan-500 to-blue-400'
+                            : 'bg-zinc-600'
+                        }`}
+                        style={{ width: `${relativeWidth}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          /* Empty State */
+          <div className="p-8 rounded-2xl bg-zinc-950/50 border border-zinc-800/80 text-center space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto border border-amber-500/20">
+              <Utensils className="w-6 h-6" />
+            </div>
+            <div className="max-w-md mx-auto space-y-1">
+              <h4 className="text-sm font-bold text-white">
+                No hay pedidos ni ventas registrados en este período
+              </h4>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Tan pronto los meseros registren comandas en las mesas o se finalicen cobros en caja, esta sección ordenará automáticamente el Top 5 de platos más populares de tu carta con sus ingresos acumulados.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 4. Weekly Sales Volume Bar Chart (recharts) */}

@@ -192,64 +192,15 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
         </div>
       )}
 
-      {/* Main Connection Card */}
-      {!user ? (
-        <div className="p-6 rounded-3xl bg-zinc-900/60 border border-zinc-800 text-center max-w-xl mx-auto space-y-4">
-          <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-400 flex items-center justify-center mx-auto border border-amber-500/20">
-            <FileSpreadsheet className="w-7 h-7" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-white">Inicia Sesión con Google</h3>
-            <p className="text-xs text-zinc-400 mt-1 max-w-md mx-auto">
-              Para crear y sincronizar las 8 tablas de tu restaurante directamente en tu cuenta de Google Drive, primero inicia sesión.
-            </p>
-          </div>
-          <button
-            onClick={onLogin}
-            disabled={isLoggingIn}
-            className="px-5 py-2.5 rounded-xl bg-white hover:bg-zinc-100 text-zinc-900 font-semibold text-xs shadow-lg transition inline-flex items-center gap-2"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24">
-              <path
-                fill="#4285F4"
-                d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-              />
-              <path
-                fill="#34A853"
-                d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
-              />
-              <path
-                fill="#FBBC05"
-                d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.16 0 9.97 0 12s.45 3.84 1.25 5.42l4.03-3.15z"
-              />
-              <path
-                fill="#EA4335"
-                d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-              />
-            </svg>
-            <span>{isLoggingIn ? 'Iniciando sesión...' : 'Conectar con Google'}</span>
-          </button>
-
-          {onOpenDomainHelp && (
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={onOpenDomainHelp}
-                className="text-xs text-amber-400 hover:text-amber-300 underline underline-offset-4 inline-flex items-center gap-1.5 transition"
-              >
-                <HelpCircle className="w-3.5 h-3.5" />
-                <span>¿Desplegaste en Netlify? Guía para autorizar dominio Firebase</span>
-              </button>
-            </div>
-          )}
-        </div>
-      ) : isSheetsConnected ? (
-        /* Connected State */
+      {/* 1. Connected State Card (if sheet is active) */}
+      {isSheetsConnected && (
         <div className="p-5 rounded-3xl bg-zinc-900/80 border border-emerald-800/40 shadow-xl space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <span className="text-xs font-semibold text-emerald-400">Hoja Activa en tu Google Drive:</span>
-              <h3 className="text-lg font-black text-white">{spreadsheetTitle || 'RestoFlow - Sistema de Restaurante'}</h3>
+              <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
+                <CheckCircle className="w-3.5 h-3.5" /> Hoja Conectada Globalmente:
+              </span>
+              <h3 className="text-lg font-black text-white">{spreadsheetTitle || 'RestoFlow - Hoja de Restaurante'}</h3>
               <p className="text-xs font-mono text-zinc-400 break-all mt-0.5">ID: {spreadsheetId}</p>
             </div>
 
@@ -268,7 +219,7 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
                 ) : (
                   <>
                     <Share2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Copiar Enlace Multidispositivo</span>
+                    <span>Copiar Enlace para Dispositivos</span>
                   </>
                 )}
               </button>
@@ -290,7 +241,7 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
           <div className="p-3 bg-zinc-950/70 border border-zinc-800 rounded-xl text-[11px] text-zinc-400 flex items-start gap-2">
             <Share2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <span>
-              <strong className="text-zinc-200">Multidispositivo en Tiempo Real:</strong> Comparte el enlace con tus meseros o cajeros. Al abrir la app en otro navegador o celular con ese enlace, se conectará de inmediato a esta hoja de cálculo y cargará los datos reales sin mostrar datos de prueba.
+              <strong className="text-zinc-200">Sincronización Transparente para Colaboradores:</strong> Los celulares y tablets de tus meseros, cocina y caja están sincronizados automáticamente con esta hoja sin que tengan que iniciar sesión con sus cuentas de Google personales.
             </span>
           </div>
 
@@ -299,66 +250,168 @@ export const SheetsSyncManager: React.FC<SheetsSyncManagerProps> = ({
               Última sincronización: <strong className="text-zinc-200">{lastSyncTime || 'Recién sincronizado'}</strong>
             </span>
             <span className="text-emerald-400 font-medium">
-              ✓ 10 hojas sincronizadas bidireccionalmente
+              ✓ 10 pestañas sincronizadas automáticamente
             </span>
           </div>
         </div>
-      ) : (
-        /* Authenticated but No Sheet connected yet */
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Option A: Create Auto */}
-          <div className="p-5 rounded-3xl bg-zinc-900/80 border border-zinc-800 shadow-xl flex flex-col justify-between">
+      )}
+
+      {/* 2. Primary Connection Card: Direct URL/Link (No Google Login Required for Staff) */}
+      <div className="p-6 rounded-3xl bg-zinc-900/80 border border-zinc-800 shadow-xl space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div className="p-3 rounded-2xl bg-indigo-500/20 text-indigo-400 shrink-0">
+              <Database className="w-6 h-6" />
+            </div>
             <div>
-              <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 w-fit mb-3">
-                <PlusCircle className="w-5 h-5" />
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-white">
+                  {isSheetsConnected ? 'Cambiar o Vincular Otra Hoja de Google Sheets' : 'Vincular Hoja mediante Enlace / URL'}
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  Método Recomendado
+                </span>
               </div>
-              <h3 className="text-base font-bold text-white">Opción 1: Crear Hoja Automática</h3>
-              <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                Crea una nueva hoja en tu Google Drive con las 10 pestañas formateadas (Menú, Mesas, Comandas, Ventas, Compras, Proveedores, Clientes, Facturación, Reservas y Usuarios) con encabezados y datos iniciales listos para operar.
+              <p className="text-xs text-zinc-400 mt-1 leading-relaxed max-w-2xl">
+                Solo pega el enlace de tu Google Sheet. Todo el restaurante (meseros, cajeros, cocina) se sincronizará de inmediato sin que nadie deba iniciar sesión con Google en su celular.
               </p>
             </div>
-
-            <button
-              onClick={handleCreate}
-              disabled={isCreating}
-              className="mt-5 w-full py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              <span>{isCreating ? 'Generando Hoja...' : 'Crear Hoja en mi Google Drive'}</span>
-            </button>
-          </div>
-
-          {/* Option B: Link Existing */}
-          <div className="p-5 rounded-3xl bg-zinc-900/80 border border-zinc-800 shadow-xl flex flex-col justify-between">
-            <div>
-              <div className="p-2.5 rounded-xl bg-indigo-500/20 text-indigo-400 w-fit mb-3">
-                <Database className="w-5 h-5" />
-              </div>
-              <h3 className="text-base font-bold text-white">Opción 2: Vincular Hoja Existente</h3>
-              <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                Pega el ID o la URL completa de una hoja de cálculo existente de Google Sheets a la que tengas acceso.
-              </p>
-            </div>
-
-            <form onSubmit={handleConnect} className="mt-4 space-y-2">
-              <input
-                type="text"
-                placeholder="https://docs.google.com/spreadsheets/d/... o ID"
-                value={manualInput}
-                onChange={(e) => setManualInput(e.target.value)}
-                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-              />
-              <button
-                type="submit"
-                disabled={isConnecting || !manualInput.trim()}
-                className="w-full py-2.5 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-md disabled:opacity-50"
-              >
-                {isConnecting ? 'Verificando...' : 'Conectar Hoja'}
-              </button>
-            </form>
           </div>
         </div>
-      )}
+
+        {/* Step-by-Step Instructions */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3.5 bg-zinc-950/70 border border-zinc-800/80 rounded-2xl text-xs text-zinc-300">
+          <div className="flex items-start gap-2">
+            <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">1</span>
+            <div>
+              <strong className="text-white block font-semibold">Abre tu Google Sheet</strong>
+              <span className="text-zinc-400 text-[11px]">En tu navegador con la cuenta del restaurante.</span>
+            </div>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">2</span>
+            <div>
+              <strong className="text-white block font-semibold">Compartir con el enlace</strong>
+              <span className="text-zinc-400 text-[11px]">En Compartir, pon "Cualquier persona con el enlace puede leer".</span>
+            </div>
+          </div>
+          <div className="flex items-start gap-2">
+            <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-[11px] shrink-0 mt-0.5">3</span>
+            <div>
+              <strong className="text-white block font-semibold">Pegar y Vincular</strong>
+              <span className="text-zinc-400 text-[11px]">Pega el enlace abajo y presiona Vincular. ¡Eso es todo!</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleConnect} className="space-y-3 pt-1">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="https://docs.google.com/spreadsheets/d/1BxiMVs.../edit o el ID alfanumérico"
+                value={manualInput}
+                onChange={(e) => setManualInput(e.target.value)}
+                className="w-full bg-zinc-950 border border-zinc-700/80 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-white font-mono focus:outline-none focus:border-amber-500 shadow-inner"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={isConnecting || !manualInput.trim()}
+              className="py-2.5 px-6 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-black text-xs transition shadow-lg shadow-orange-500/20 disabled:opacity-50 shrink-0 flex items-center justify-center gap-2"
+            >
+              {isConnecting ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>Vinculando...</span>
+                </>
+              ) : (
+                <>
+                  <Database className="w-3.5 h-3.5" />
+                  <span>Vincular Hoja para el Restaurante</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* 3. Advanced Administrator Google Drive Options */}
+      <div className="p-5 rounded-3xl bg-zinc-900/50 border border-zinc-800/80 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <FileSpreadsheet className="w-4 h-4 text-amber-400" />
+            <h4 className="text-xs font-bold text-zinc-200 uppercase tracking-wider">
+              Opciones Avanzadas de Administrador (Google OAuth)
+            </h4>
+          </div>
+          {user ? (
+            <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+              Google: {user.email || user.displayName}
+            </span>
+          ) : (
+            <span className="text-[11px] text-zinc-500">Solo necesario para autogenerar hojas</span>
+          )}
+        </div>
+
+        <p className="text-xs text-zinc-400 leading-relaxed">
+          Si eres el Administrador y no tienes una hoja creada todavía, puedes iniciar sesión una sola vez para que el sistema cree automáticamente una hoja en tu Google Drive con las 10 pestañas y columnas pre-formateadas.
+        </p>
+
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          {!user ? (
+            <button
+              type="button"
+              onClick={onLogin}
+              disabled={isLoggingIn}
+              className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs border border-zinc-700 transition inline-flex items-center gap-2 disabled:opacity-50"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24">
+                <path
+                  fill="#4285F4"
+                  d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.16 0 9.97 0 12s.45 3.84 1.25 5.42l4.03-3.15z"
+                />
+                <path
+                  fill="#EA4335"
+                  d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+                />
+              </svg>
+              <span>{isLoggingIn ? 'Conectando...' : 'Acceder con Google (Admin)'}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleCreate}
+              disabled={isCreating}
+              className="py-2 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition shadow-md flex items-center gap-2 disabled:opacity-50"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>{isCreating ? 'Generando en Drive...' : 'Crear Hoja Automática en mi Google Drive'}</span>
+            </button>
+          )}
+
+          {onOpenDomainHelp && (
+            <button
+              type="button"
+              onClick={onOpenDomainHelp}
+              className="text-xs text-amber-400/80 hover:text-amber-300 underline underline-offset-4 inline-flex items-center gap-1.5 transition ml-auto"
+            >
+              <HelpCircle className="w-3.5 h-3.5" />
+              <span>Ayuda para Error 403 / Dominios</span>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* 10 Sheets Structure Inspection Table */}
       <div className="bg-zinc-900/90 border border-zinc-800 rounded-2xl overflow-hidden shadow-xl">
