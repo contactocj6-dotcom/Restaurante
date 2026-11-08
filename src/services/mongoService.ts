@@ -48,13 +48,38 @@ export interface MongoPullResult {
   error?: string;
 }
 
+async function parseJsonResponse(res: Response, fallbackMessage: string) {
+  const contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    try {
+      return await res.json();
+    } catch (err: any) {
+      return {
+        success: false,
+        configured: false,
+        connected: false,
+        message: fallbackMessage,
+        error: err?.message || String(err),
+      };
+    }
+  } else {
+    return {
+      success: false,
+      configured: false,
+      connected: false,
+      message: 'El servidor backend no devolvió JSON válido. Es posible que el servidor se esté reiniciando.',
+      error: 'Invalid non-JSON response (HTML DOCTYPE)',
+    };
+  }
+}
+
 /**
  * Fetch current MongoDB connection status and collection statistics from backend
  */
 export async function fetchMongoStatus(): Promise<MongoStatusResponse> {
   try {
     const res = await fetch('/api/mongo/status');
-    return await res.json();
+    return await parseJsonResponse(res, 'Error al procesar el estado de MongoDB');
   } catch (err: any) {
     return {
       configured: false,
@@ -76,7 +101,7 @@ export async function testMongoConnection(uri: string, dbName = 'restoflow'): Pr
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ uri, dbName }),
     });
-    return await res.json();
+    return await parseJsonResponse(res, 'Error al probar la conexión con MongoDB Atlas');
   } catch (err: any) {
     return {
       success: false,
@@ -100,7 +125,7 @@ export async function saveMongoConfig(
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ uri, dbName, autoSync }),
     });
-    return await res.json();
+    return await parseJsonResponse(res, 'Error al guardar la configuración de MongoDB Atlas');
   } catch (err: any) {
     return {
       configured: false,
@@ -118,7 +143,7 @@ export async function saveMongoConfig(
 export async function disconnectMongo(): Promise<{ success: boolean; message: string }> {
   try {
     const res = await fetch('/api/mongo/disconnect', { method: 'POST' });
-    return await res.json();
+    return await parseJsonResponse(res, 'Error al desconectar de MongoDB Atlas');
   } catch (err: any) {
     return { success: false, message: err?.message || 'Error al desconectar' };
   }
@@ -146,7 +171,7 @@ export async function pushAllToMongo(data: {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data }),
     });
-    return await res.json();
+    return await parseJsonResponse(res, 'Error al sincronizar datos hacia MongoDB Atlas');
   } catch (err: any) {
     return {
       success: false,
@@ -162,7 +187,7 @@ export async function pushAllToMongo(data: {
 export async function pullAllFromMongo(): Promise<MongoPullResult> {
   try {
     const res = await fetch('/api/mongo/pull-all');
-    return await res.json();
+    return await parseJsonResponse(res, 'Error al consultar colecciones de MongoDB Atlas');
   } catch (err: any) {
     return {
       success: false,
@@ -182,7 +207,7 @@ export async function liveUpsertComandaToMongo(comanda: any): Promise<boolean> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ comanda }),
     });
-    const data = await res.json();
+    const data = await parseJsonResponse(res, 'Error en upsert de comanda');
     return !!data.success;
   } catch {
     return false;
