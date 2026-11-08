@@ -31,21 +31,8 @@ let nextClientId = 1;
 const notificationHistory: NotificationPayload[] = [];
 const registeredKitchenDevices: Map<string, DeviceRegistration> = new Map();
 
-async function startServer() {
+export async function createApp(includeVite = false) {
   const app = express();
-  const portArgIndex = process.argv.indexOf('--port');
-  const cliPort =
-    portArgIndex !== -1 && process.argv[portArgIndex + 1]
-      ? parseInt(process.argv[portArgIndex + 1], 10)
-      : null;
-  // In AI Studio, Nginx listens on 8080 and proxies incoming traffic to port 3000.
-  // The dev/production app server must always listen on port 3000.
-  const envPort =
-    process.env.PORT && process.env.PORT !== '8080'
-      ? parseInt(process.env.PORT, 10)
-      : null;
-  const PORT = cliPort || envPort || 3000;
-
   app.use(express.json());
 
   // Explicitly serve Firebase Messaging Service Worker
@@ -757,29 +744,49 @@ async function startServer() {
     }
   });
 
-  // Vite middleware in dev or static files in production
-  if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(path.resolve(__dirname, 'dist')));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
-    });
-  } else {
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        hmr: process.env.DISABLE_HMR !== 'true',
-      },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
+  // Vite middleware in dev or static files in production (only when running standalone server)
+  if (includeVite) {
+    if (process.env.NODE_ENV === 'production') {
+      app.use(express.static(path.resolve(__dirname, 'dist')));
+      app.get('*', (_req, res) => {
+        res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
+      });
+    } else {
+      const vite = await createViteServer({
+        server: {
+          middlewareMode: true,
+          hmr: process.env.DISABLE_HMR !== 'true',
+        },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    }
   }
+
+  return app;
+}
+
+async function startServer() {
+  const app = await createApp(true);
+  const portArgIndex = process.argv.indexOf('--port');
+  const cliPort =
+    portArgIndex !== -1 && process.argv[portArgIndex + 1]
+      ? parseInt(process.argv[portArgIndex + 1], 10)
+      : null;
+  const envPort =
+    process.env.PORT && process.env.PORT !== '8080'
+      ? parseInt(process.env.PORT, 10)
+      : null;
+  const PORT = cliPort || envPort || 3000;
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`RestoFlow Server listening on http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer().catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+if (process.argv[1] && process.argv[1].endsWith('server.ts')) {
+  startServer().catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+}
