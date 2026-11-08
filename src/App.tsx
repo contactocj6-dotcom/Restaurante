@@ -54,18 +54,6 @@ import {
   logout as authLogout,
   getAccessToken,
 } from './services/firebaseAuth';
-import {
-  createRestaurantSpreadsheet,
-  fetchAllSheetsData,
-  fetchAllSheetsDataWithoutAuth,
-  syncSheetFullRows,
-  appendRowToGoogleSheet,
-  appendRowViaServer,
-  getSpreadsheetDetails,
-  extractSpreadsheetId,
-  fetchServerSheetsConfig,
-  saveServerSheetsConfig,
-} from './services/sheetsService';
 import { audioService } from './services/audioService';
 import { notificationService, AlertNotification } from './services/notificationService';
 import { fcmService } from './services/fcmService';
@@ -79,7 +67,13 @@ import { SalesInvoiceView } from './components/SalesInvoiceView';
 import { MenuManagement } from './components/MenuManagement';
 import { InventorySuppliers } from './components/InventorySuppliers';
 import { CustomerManagement } from './components/CustomerManagement';
-import { SheetsSyncManager } from './components/SheetsSyncManager';
+import { MongoAtlasManager } from './components/MongoAtlasManager';
+import {
+  fetchMongoStatus,
+  liveUpsertComandaToMongo,
+  pullAllFromMongo,
+  pushAllToMongo,
+} from './services/mongoService';
 import { ConfirmationModal } from './components/ConfirmationModal';
 import { KpiDashboard } from './components/KpiDashboard';
 import { ReservationsManagement } from './components/ReservationsManagement';
@@ -99,7 +93,7 @@ import {
   getSavedRestaurantInfo,
   saveRestaurantInfo,
 } from './utils/colombiaFiscal';
-import { Bell, CheckCircle, Info, X } from 'lucide-react';
+import { Bell, CheckCircle, Info, X, Database } from 'lucide-react';
 
 export default function App() {
   // Navigation & User
@@ -141,6 +135,25 @@ export default function App() {
   const [isUnauthorizedDomainOpen, setIsUnauthorizedDomainOpen] = useState(false);
   const [unauthorizedModalTab, setUnauthorizedModalTab] = useState<'oauth403' | 'domain'>('oauth403');
   const [isResetDataModalOpen, setIsResetDataModalOpen] = useState(false);
+  const [isMongoConnected, setIsMongoConnected] = useState(false);
+
+  // Check MongoDB Atlas status on launch & auto-pull initial data
+  useEffect(() => {
+    fetchMongoStatus()
+      .then((res) => {
+        setIsMongoConnected(!!res.connected);
+        if (res.connected) {
+          pullAllFromMongo()
+            .then((pullRes) => {
+              if (pullRes.success && pullRes.data) {
+                handleApplyMongoData(pullRes.data);
+              }
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Admin PIN Authorization modal for sensitive actions
   const [adminAuthModal, setAdminAuthModal] = useState<{
@@ -357,37 +370,6 @@ export default function App() {
 
   const activeCajero = cajeros.find((c) => c.id === activeCajeroId) || cajeros[0] || null;
 
-  // Google Sheets Connection State (Prioritizes persistent restoflow_global_sheet_id configured by Admin)
-  const [spreadsheetId, setSpreadsheetId] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      const globalId = localStorage.getItem('restoflow_global_sheet_id');
-      if (globalId) return globalId;
-      const params = new URLSearchParams(window.location.search);
-      const urlSheet = params.get('sheet') || params.get('sheetId');
-      if (urlSheet) {
-        localStorage.setItem('restoflow_global_sheet_id', urlSheet);
-        localStorage.setItem('restoflow_sheet_id', urlSheet);
-        return urlSheet;
-      }
-    }
-    const savedRestaurantInfo = getSavedRestaurantInfo();
-    if (savedRestaurantInfo?.googleSheetId) {
-      return savedRestaurantInfo.googleSheetId;
-    }
-    return (
-      (typeof window !== 'undefined' ? localStorage.getItem('restoflow_global_sheet_id') : '') ||
-      localStorage.getItem('restoflow_sheet_id') ||
-      ''
-    );
-  });
-  const [spreadsheetTitle, setSpreadsheetTitle] = useState<string>(() => {
-    return localStorage.getItem('restoflow_sheet_title') || '';
-  });
-  const [spreadsheetUrl, setSpreadsheetUrl] = useState<string>('');
-  const [isSheetsConnected, setIsSheetsConnected] = useState<boolean>(false);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [lastSyncTime, setLastSyncTime] = useState<string>('');
-
   // Modals & UI Controls
   const [isComandaModalOpen, setIsComandaModalOpen] = useState<boolean>(false);
   const [selectedTableForComanda, setSelectedTableForComanda] = useState<Table | null>(null);
@@ -473,254 +455,149 @@ export default function App() {
     localStorage.setItem('restoflow_staff_users', JSON.stringify(staffUsers));
   }, [staffUsers]);
 
-  // Sync data from Google Sheets (including Staff Users and Reservas)
-  const handleSyncFromSheets = async (token?: string, sheetId?: string) => {
-    const currentToken = token || (await getAccessToken());
-    const targetSheetId = sheetId || spreadsheetId;
-
-    if (!currentToken || !targetSheetId) return;
-
-    setIsSyncing(true);
-    try {
-      const data = await fetchAllSheetsData(currentToken, targetSheetId);
-      if (data.menu && data.menu.length > 0) {
-        setMenu(data.menu);
-        localStorage.setItem('restoflow_menu', JSON.stringify(data.menu));
-      }
-      if (data.tables && data.tables.length > 0) {
-        setTables(data.tables);
-        localStorage.setItem('restoflow_tables', JSON.stringify(data.tables));
-      }
-      // For operational data: mirror Google Sheets directly (if empty or zeroed, mirrors faithfully)
-      const newComandas = data.comandas || [];
-      setComandas(newComandas);
-      localStorage.setItem('restoflow_comandas', JSON.stringify(newComandas));
-
-      const newVentas = data.ventas || [];
-      setVentas(newVentas);
-      localStorage.setItem('restoflow_ventas', JSON.stringify(newVentas));
-
-      if (data.compras) {
-        setCompras(data.compras);
-        localStorage.setItem('restoflow_compras', JSON.stringify(data.compras));
-      }
-      if (data.proveedores && data.proveedores.length > 0) {
-        setProveedores(data.proveedores);
-        localStorage.setItem('restoflow_proveedores', JSON.stringify(data.proveedores));
-      }
-      if (data.clientes) {
-        setClientes(data.clientes);
-        localStorage.setItem('restoflow_clientes', JSON.stringify(data.clientes));
-      }
-      const newFacturas = data.facturas || [];
-      setFacturas(newFacturas);
-      localStorage.setItem('restoflow_facturas', JSON.stringify(newFacturas));
-
-      if (data.reservas) {
-        setReservas(data.reservas);
-        localStorage.setItem('restoflow_reservas', JSON.stringify(data.reservas));
-      }
-
-      if (data.staffUsers && data.staffUsers.length > 0) {
-        setStaffUsers(data.staffUsers);
-        localStorage.setItem('restoflow_staff_users', JSON.stringify(data.staffUsers));
-      }
-
-      setIsSheetsConnected(true);
-      setLastSyncTime(new Date().toLocaleTimeString());
-    } catch (err: any) {
-      console.error('Failed to sync from sheets:', err);
-    } finally {
-      setIsSyncing(false);
+  // Apply full dataset pulled from MongoDB Atlas
+  const handleApplyMongoData = useCallback((pulled: any) => {
+    if (!pulled) return;
+    if (pulled.menu && pulled.menu.length > 0) {
+      setMenu(pulled.menu);
+      localStorage.setItem('restoflow_menu', JSON.stringify(pulled.menu));
     }
-  };
+    if (pulled.tables && pulled.tables.length > 0) {
+      setTables(pulled.tables);
+      localStorage.setItem('restoflow_tables', JSON.stringify(pulled.tables));
+    }
+    if (pulled.comandas !== undefined) {
+      setComandas(pulled.comandas);
+      localStorage.setItem('restoflow_comandas', JSON.stringify(pulled.comandas));
+    }
+    if (pulled.ventas !== undefined) {
+      setVentas(pulled.ventas);
+      localStorage.setItem('restoflow_ventas', JSON.stringify(pulled.ventas));
+    }
+    if (pulled.clientes !== undefined) {
+      setClientes(pulled.clientes);
+      localStorage.setItem('restoflow_clientes', JSON.stringify(pulled.clientes));
+    }
+    if (pulled.proveedores !== undefined) {
+      setProveedores(pulled.proveedores);
+      localStorage.setItem('restoflow_proveedores', JSON.stringify(pulled.proveedores));
+    }
+    if (pulled.compras !== undefined) {
+      setCompras(pulled.compras);
+      localStorage.setItem('restoflow_compras', JSON.stringify(pulled.compras));
+    }
+    if (pulled.facturas !== undefined) {
+      setFacturas(pulled.facturas);
+      localStorage.setItem('restoflow_facturas', JSON.stringify(pulled.facturas));
+    }
+    if (pulled.reservas !== undefined) {
+      setReservas(pulled.reservas);
+      localStorage.setItem('restoflow_reservas', JSON.stringify(pulled.reservas));
+    }
+    if (pulled.staffUsers && pulled.staffUsers.length > 0) {
+      setStaffUsers(pulled.staffUsers);
+      localStorage.setItem('restoflow_staff_users', JSON.stringify(pulled.staffUsers));
+    }
+    if (pulled.restaurantInfo) {
+      setRestaurantInfo(pulled.restaurantInfo);
+      saveRestaurantInfo(pulled.restaurantInfo);
+    }
+    setIsMongoConnected(true);
+    setActiveToast({
+      id: `toast-${Date.now()}`,
+      title: 'Datos de MongoDB Atlas Aplicados',
+      body: 'Se sincronizó el menú, mesas, comandas y ventas desde la base de datos cloud.',
+      timestamp: new Date().toISOString(),
+    });
+  }, []);
 
-  // Sync data without OAuth token (using public Google Sheet link / server proxy)
-  // This allows any waiter tablet or cashier phone to sync restaurant data without signing into Google.
-  const handleSyncWithoutAuth = useCallback(
-    async (sheetId?: string) => {
-      const targetSheetId = sheetId || restaurantInfo.googleSheetId || spreadsheetId;
-      if (!targetSheetId) return;
-
-      setIsSyncing(true);
-      try {
-        const data = await fetchAllSheetsDataWithoutAuth(targetSheetId);
-        if (data.menu && data.menu.length > 0) {
-          setMenu(data.menu);
-          localStorage.setItem('restoflow_menu', JSON.stringify(data.menu));
-        }
-        if (data.tables && data.tables.length > 0) {
-          setTables(data.tables);
-          localStorage.setItem('restoflow_tables', JSON.stringify(data.tables));
-        }
-        if (data.comandas !== undefined && data.comandas.length > 0) {
-          setComandas(data.comandas);
-          localStorage.setItem('restoflow_comandas', JSON.stringify(data.comandas));
-        }
-        if (data.ventas !== undefined && data.ventas.length > 0) {
-          setVentas(data.ventas);
-          localStorage.setItem('restoflow_ventas', JSON.stringify(data.ventas));
-        }
-        if (data.compras !== undefined && data.compras.length > 0) {
-          setCompras(data.compras);
-          localStorage.setItem('restoflow_compras', JSON.stringify(data.compras));
-        }
-        if (data.proveedores !== undefined && data.proveedores.length > 0) {
-          setProveedores(data.proveedores);
-          localStorage.setItem('restoflow_proveedores', JSON.stringify(data.proveedores));
-        }
-        if (data.clientes !== undefined && data.clientes.length > 0) {
-          setClientes(data.clientes);
-          localStorage.setItem('restoflow_clientes', JSON.stringify(data.clientes));
-        }
-        if (data.facturas !== undefined && data.facturas.length > 0) {
-          setFacturas(data.facturas);
-          localStorage.setItem('restoflow_facturas', JSON.stringify(data.facturas));
-        }
-        if (data.reservas !== undefined && data.reservas.length > 0) {
-          setReservas(data.reservas);
-          localStorage.setItem('restoflow_reservas', JSON.stringify(data.reservas));
-        }
-        if (data.staffUsers && data.staffUsers.length > 0) {
-          setStaffUsers(data.staffUsers);
-          localStorage.setItem('restoflow_staff_users', JSON.stringify(data.staffUsers));
-        }
-
-        setIsSheetsConnected(true);
-        setLastSyncTime(new Date().toLocaleTimeString());
-      } catch (err) {
-        console.warn('Sync without auth error:', err);
-      } finally {
-        setIsSyncing(false);
-      }
-    },
-    [restaurantInfo.googleSheetId, spreadsheetId]
-  );
-
-  // One-time initialization & Server Config Check:
-  // 1. Check if the server already has a Google Sheet URL configured centrally for the restaurant.
-  // 2. If 'restoflow_initialized' is missing, hydrate from Sheets (via OAuth or public link) or use defaults.
+  // One-time initialization check
   useEffect(() => {
-    const runInitialSetup = async () => {
-      // 1. Check server-side restaurant sheets configuration
-      let targetSheetId = spreadsheetId || localStorage.getItem('restoflow_sheet_id') || restaurantInfo.googleSheetId;
+    const initialized = localStorage.getItem('restoflow_initialized');
+    if (!initialized) {
+      setMenu(INITIAL_MENU);
+      localStorage.setItem('restoflow_menu', JSON.stringify(INITIAL_MENU));
+      setTables(INITIAL_TABLES);
+      localStorage.setItem('restoflow_tables', JSON.stringify(INITIAL_TABLES));
+      setComandas(INITIAL_COMANDAS);
+      localStorage.setItem('restoflow_comandas', JSON.stringify(INITIAL_COMANDAS));
+      setVentas(INITIAL_VENTAS);
+      localStorage.setItem('restoflow_ventas', JSON.stringify(INITIAL_VENTAS));
+      setCompras(INITIAL_COMPRAS);
+      localStorage.setItem('restoflow_compras', JSON.stringify(INITIAL_COMPRAS));
+      setProveedores(INITIAL_PROVEEDORES);
+      localStorage.setItem('restoflow_proveedores', JSON.stringify(INITIAL_PROVEEDORES));
+      setClientes(INITIAL_CLIENTES);
+      localStorage.setItem('restoflow_clientes', JSON.stringify(INITIAL_CLIENTES));
+      setFacturas(INITIAL_FACTURAS);
+      localStorage.setItem('restoflow_facturas', JSON.stringify(INITIAL_FACTURAS));
+      setReservas(INITIAL_RESERVAS);
+      localStorage.setItem('restoflow_reservas', JSON.stringify(INITIAL_RESERVAS));
+      setCajeros(INITIAL_CAJEROS);
+      localStorage.setItem('restoflow_cajeros', JSON.stringify(INITIAL_CAJEROS));
+      setStaffUsers(INITIAL_STAFF_USERS);
+      localStorage.setItem('restoflow_staff_users', JSON.stringify(INITIAL_STAFF_USERS));
+      localStorage.setItem('restoflow_initialized', 'true');
+    }
+  }, []);
+
+  // Automatic background push to MongoDB Atlas when data changes and MongoDB is connected
+  useEffect(() => {
+    if (!isMongoConnected) return;
+
+    const timer = setTimeout(() => {
+      pushAllToMongo({
+        menu,
+        tables,
+        comandas,
+        ventas,
+        clientes,
+        proveedores,
+        compras,
+        facturas,
+        reservas,
+        staffUsers,
+        restaurantInfo,
+      }).catch(() => {});
+    }, 2500); // Debounce 2.5s
+
+    return () => clearTimeout(timer);
+  }, [isMongoConnected, menu, tables, comandas, ventas, clientes, proveedores, compras, facturas, reservas, staffUsers, restaurantInfo]);
+
+  // Periodic polling pull from MongoDB Atlas (every 30 seconds) to sync updates from other devices automatically
+  useEffect(() => {
+    if (!isMongoConnected) return;
+
+    const interval = setInterval(async () => {
       try {
-        const serverConfig = await fetchServerSheetsConfig();
-        if (serverConfig?.googleSheetId) {
-          targetSheetId = serverConfig.googleSheetId;
-          setSpreadsheetId(serverConfig.googleSheetId);
-          setSpreadsheetTitle(serverConfig.sheetTitle || 'RestoFlow - Hoja Principal');
-          setSpreadsheetUrl(serverConfig.googleSheetUrl || `https://docs.google.com/spreadsheets/d/${serverConfig.googleSheetId}/edit`);
-          localStorage.setItem('restoflow_sheet_id', serverConfig.googleSheetId);
-          if (serverConfig.sheetTitle) {
-            localStorage.setItem('restoflow_sheet_title', serverConfig.sheetTitle);
-          }
-          setIsSheetsConnected(true);
+        const pullRes = await pullAllFromMongo();
+        if (pullRes.success && pullRes.data) {
+          // Quietly update local state with remote data
+          if (pullRes.data.comandas) setComandas(pullRes.data.comandas);
+          if (pullRes.data.tables) setTables(pullRes.data.tables);
+          if (pullRes.data.menu) setMenu(pullRes.data.menu);
+          if (pullRes.data.ventas) setVentas(pullRes.data.ventas);
+          if (pullRes.data.clientes) setClientes(pullRes.data.clientes);
+          if (pullRes.data.reservas) setReservas(pullRes.data.reservas);
         }
-      } catch (e) {
-        console.warn('Server sheets config check skipped:', e);
-      }
+      } catch {}
+    }, 30000);
 
-      // 2. Hydration check
-      const initialized = localStorage.getItem('restoflow_initialized');
-      if (!initialized) {
-        let loadedFromSheets = false;
-        const currentToken = await getAccessToken();
+    return () => clearInterval(interval);
+  }, [isMongoConnected]);
 
-        if (targetSheetId) {
-          try {
-            if (currentToken) {
-              await handleSyncFromSheets(currentToken, targetSheetId);
-              loadedFromSheets = true;
-            } else {
-              await handleSyncWithoutAuth(targetSheetId);
-              loadedFromSheets = true;
-            }
-          } catch (err) {
-            console.warn('Initial load from Sheets failed, falling back to defaults:', err);
-          }
-        }
-
-        if (!loadedFromSheets) {
-          setMenu(INITIAL_MENU);
-          localStorage.setItem('restoflow_menu', JSON.stringify(INITIAL_MENU));
-          setTables(INITIAL_TABLES);
-          localStorage.setItem('restoflow_tables', JSON.stringify(INITIAL_TABLES));
-          setComandas(INITIAL_COMANDAS);
-          localStorage.setItem('restoflow_comandas', JSON.stringify(INITIAL_COMANDAS));
-          setVentas(INITIAL_VENTAS);
-          localStorage.setItem('restoflow_ventas', JSON.stringify(INITIAL_VENTAS));
-          setCompras(INITIAL_COMPRAS);
-          localStorage.setItem('restoflow_compras', JSON.stringify(INITIAL_COMPRAS));
-          setProveedores(INITIAL_PROVEEDORES);
-          localStorage.setItem('restoflow_proveedores', JSON.stringify(INITIAL_PROVEEDORES));
-          setClientes(INITIAL_CLIENTES);
-          localStorage.setItem('restoflow_clientes', JSON.stringify(INITIAL_CLIENTES));
-          setFacturas(INITIAL_FACTURAS);
-          localStorage.setItem('restoflow_facturas', JSON.stringify(INITIAL_FACTURAS));
-          setReservas(INITIAL_RESERVAS);
-          localStorage.setItem('restoflow_reservas', JSON.stringify(INITIAL_RESERVAS));
-          setCajeros(INITIAL_CAJEROS);
-          localStorage.setItem('restoflow_cajeros', JSON.stringify(INITIAL_CAJEROS));
-          setStaffUsers(INITIAL_STAFF_USERS);
-          localStorage.setItem('restoflow_staff_users', JSON.stringify(INITIAL_STAFF_USERS));
-        }
-
-        localStorage.setItem('restoflow_initialized', 'true');
-      }
-    };
-
-    runInitialSetup();
-  }, [handleSyncWithoutAuth]);
-
-  // Auth Listener (preserves local state on reload; only hydrates from Sheets on very first run if not initialized)
+  // Auth Listener
   useEffect(() => {
     const unsubscribe = initAuth(
-      async (currentUser, token) => {
+      (currentUser) => {
         setUser(currentUser);
-        if (spreadsheetId && token) {
-          setIsSheetsConnected(true);
-          const initialized = localStorage.getItem('restoflow_initialized');
-          if (!initialized) {
-            try {
-              await handleSyncFromSheets(token, spreadsheetId);
-              localStorage.setItem('restoflow_initialized', 'true');
-            } catch (err) {
-              console.warn('Initial load from Sheets via auth:', err);
-            }
-          }
-        }
       },
       () => {
         setUser(null);
       }
     );
     return () => unsubscribe();
-  }, [spreadsheetId]);
-
-  // Transparent background synchronization at the restaurant level (every 45 seconds)
-  // Staff devices (waiters, kitchen, cashier) sync transparently without requiring Google logins!
-  useEffect(() => {
-    const targetSheetId = restaurantInfo.googleSheetId || spreadsheetId;
-    if (!targetSheetId || restaurantInfo.autoSyncEnabled === false) return;
-
-    const interval = setInterval(async () => {
-      const token = await getAccessToken();
-      if (token) {
-        try {
-          await handleSyncFromSheets(token, targetSheetId);
-        } catch (e) {
-          // Fall back to no-auth public read
-          await handleSyncWithoutAuth(targetSheetId);
-        }
-      } else {
-        // Staff device: transparent background read via GViz proxy
-        await handleSyncWithoutAuth(targetSheetId);
-      }
-    }, 45000);
-
-    return () => clearInterval(interval);
-  }, [restaurantInfo.googleSheetId, restaurantInfo.autoSyncEnabled, spreadsheetId, handleSyncWithoutAuth]);
+  }, []);
 
   // Real-time Push Notification Listener (SSE)
   useEffect(() => {
@@ -740,10 +617,6 @@ export default function App() {
       const res = await googleSignIn();
       if (res) {
         setUser(res.user);
-        if (spreadsheetId) {
-          setIsSheetsConnected(true);
-          await handleSyncFromSheets(res.accessToken, spreadsheetId);
-        }
       }
     } catch (err: any) {
       console.error('Login error:', err);
@@ -786,7 +659,6 @@ export default function App() {
   const handleLogout = async () => {
     await authLogout();
     setUser(null);
-    setIsSheetsConnected(false);
   };
 
   // Toggle Sound
@@ -795,136 +667,6 @@ export default function App() {
     setSoundEnabled(newState);
   };
 
-  // Push all local data to Google Sheets
-  const handleSyncAllToSheets = async () => {
-    const token = await getAccessToken();
-    if (!token || !spreadsheetId) {
-      setActiveToast({
-        id: Date.now().toString(),
-        title: 'Google Sheets no conectado',
-        body: 'Debes conectar una hoja de cálculo con Google primero.',
-        timestamp: new Date().toLocaleTimeString(),
-      });
-      return;
-    }
-
-    setConfirmModalConfig({
-      isOpen: true,
-      title: 'Sincronizar Todas las Hojas en Google Sheets',
-      description:
-        '¿Deseas enviar los datos actuales de Menú, Mesas, Comandas, Ventas, Compras, Proveedores, Clientes, Facturación, Reservas y Usuarios (con sus PINs) a tu hoja de Google Sheets?',
-      confirmLabel: 'Sincronizar Ahora',
-      isDestructive: false,
-      action: async () => {
-        setIsSyncing(true);
-        try {
-          await syncSheetFullRows(
-            token,
-            spreadsheetId,
-            'Menú',
-            menu.map((m) => [
-              m.id,
-              m.nombre,
-              m.descripcion,
-              m.precio,
-              m.categoria,
-              m.disponible ? 'SI' : 'NO',
-              m.stockActual,
-              m.stockMinimo,
-            ])
-          );
-          await syncSheetFullRows(
-            token,
-            spreadsheetId,
-            'Mesas',
-            tables.map((t) => [t.id, t.numero, t.estado, t.capacidad, t.clienteActualId || ''])
-          );
-          await syncSheetFullRows(
-            token,
-            spreadsheetId,
-            'Comandas',
-            comandas.map((c) => [c.idComanda, c.idMesa, JSON.stringify(c.listaItems), c.total, c.estado, c.timestamp])
-          );
-          await syncSheetFullRows(
-            token,
-            spreadsheetId,
-            'Ventas',
-            ventas.map((v) => [v.idVenta, v.idComanda, v.fecha, v.monto, v.metodoPago])
-          );
-          await syncSheetFullRows(
-            token,
-            spreadsheetId,
-            'Compras',
-            compras.map((cp) => [cp.idCompra, cp.proveedorId, cp.fecha, cp.monto, cp.descripcion])
-          );
-          await syncSheetFullRows(
-            token,
-            spreadsheetId,
-            'Proveedores',
-            proveedores.map((p) => [p.id, p.nombre, p.contacto, p.telefono, p.email])
-          );
-          await syncSheetFullRows(
-            token,
-            spreadsheetId,
-            'Clientes',
-            clientes.map((cl) => [cl.id, cl.nombre, cl.telefono, cl.email, cl.historialPedidos])
-          );
-          await syncSheetFullRows(
-            token,
-            spreadsheetId,
-            'Facturación',
-            facturas.map((f) => [f.idFactura, f.idVenta, f.fecha, f.nitCliente, f.monto, f.estado])
-          );
-          await syncSheetFullRows(
-            token,
-            spreadsheetId,
-            'Reservas',
-            reservas.map((r) => [
-              r.id,
-              r.idMesa,
-              r.mesaNumero,
-              r.clienteNombre,
-              r.clienteTelefono || '',
-              r.fecha,
-              r.hora,
-              r.comensales,
-              r.notas || '',
-              r.estado,
-            ])
-          );
-          await syncSheetFullRows(
-            token,
-            spreadsheetId,
-            'Usuarios',
-            staffUsers.map((u) => [
-              u.id,
-              u.nombre,
-              u.rol,
-              u.pin,
-              u.activo ? 'SI' : 'NO',
-              u.telefono || '',
-              u.email || '',
-              u.ultimoAcceso || '',
-            ])
-          );
-
-          setLastSyncTime(new Date().toLocaleTimeString());
-          audioService.playSuccessTone();
-        } catch (err: any) {
-          console.error('Error syncing all:', err);
-          setActiveToast({
-            id: Date.now().toString(),
-            title: 'Error al Sincronizar',
-            body: `No se pudo sincronizar: ${err.message || err}`,
-            timestamp: new Date().toLocaleTimeString(),
-          });
-        } finally {
-          setIsSyncing(false);
-          setConfirmModalConfig((c) => ({ ...c, isOpen: false }));
-        }
-      },
-    });
-  };
 
   // Reset system to clean production mode
   const handleResetToProduction = ({ clearMenu, keepStaff }: { clearMenu: boolean; keepStaff: boolean }) => {
@@ -1063,100 +805,7 @@ export default function App() {
     audioService.playSuccessTone();
   };
 
-  // Create brand new sheet in Google Drive
-  const handleCreateNewSheet = async () => {
-    const token = await getAccessToken();
-    if (!token) {
-      await handleLogin();
-      return;
-    }
 
-    const { spreadsheetId: newId, spreadsheetUrl: newUrl } =
-      await createRestaurantSpreadsheet(token, 'RestoFlow - Gestión de Restaurante');
-
-    setSpreadsheetId(newId);
-    setSpreadsheetTitle('RestoFlow - Gestión de Restaurante');
-    setSpreadsheetUrl(newUrl);
-    localStorage.setItem('restoflow_sheet_id', newId);
-    localStorage.setItem('restoflow_sheet_title', 'RestoFlow - Gestión de Restaurante');
-    setIsSheetsConnected(true);
-    setLastSyncTime(new Date().toLocaleTimeString());
-
-    audioService.playSuccessTone();
-  };
-
-  // Connect existing sheet - Supports connecting via URL / ID directly without requiring individual Google login!
-  const handleConnectExistingSheet = async (idOrUrl: string) => {
-    const cleanId = extractSpreadsheetId(idOrUrl);
-    if (!cleanId) return;
-
-    setIsSyncing(true);
-    try {
-      const token = await getAccessToken();
-      let sheetTitle = 'RestoFlow - Hoja de Restaurante';
-
-      if (token) {
-        try {
-          const details = await getSpreadsheetDetails(token, cleanId);
-          sheetTitle = details.properties?.title || sheetTitle;
-        } catch (e) {
-          console.warn('Could not fetch title via OAuth, using fallback');
-        }
-      }
-
-      setSpreadsheetId(cleanId);
-      setSpreadsheetTitle(sheetTitle);
-      const sheetUrl = idOrUrl.includes('http') ? idOrUrl : `https://docs.google.com/spreadsheets/d/${cleanId}/edit`;
-      setSpreadsheetUrl(sheetUrl);
-      localStorage.setItem('restoflow_sheet_id', cleanId);
-      localStorage.setItem('restoflow_sheet_title', sheetTitle);
-      setIsSheetsConnected(true);
-
-      // Save restaurant info & central server config so all devices are updated
-      const updatedInfo = {
-        ...restaurantInfo,
-        googleSheetId: cleanId,
-        googleSheetUrl: sheetUrl,
-        autoSyncEnabled: true,
-      };
-      setRestaurantInfo(updatedInfo);
-      saveRestaurantInfo(updatedInfo);
-      saveServerSheetsConfig({
-        googleSheetUrl: sheetUrl,
-        sheetTitle,
-        autoSyncEnabled: true,
-        adminToken: token || undefined,
-      }).catch(() => {});
-
-      // Hydrate data from Sheet
-      if (token) {
-        await handleSyncFromSheets(token, cleanId);
-      } else {
-        await handleSyncWithoutAuth(cleanId);
-      }
-
-      audioService.playSuccessTone();
-      setActiveToast({
-        id: `toast-${Date.now()}`,
-        title: '¡Hoja de Google Sheets Vinculada!',
-        body: 'Hoja conectada globalmente. Todos los dispositivos de meseros y cocina sincronizan automáticamente sin pedir contraseñas.',
-        timestamp: new Date().toLocaleTimeString(),
-      });
-    } catch (err: any) {
-      console.error('Error connecting sheet:', err);
-      // Still set sheet ID so user can use it
-      setSpreadsheetId(cleanId);
-      setIsSheetsConnected(true);
-      setActiveToast({
-        id: `toast-${Date.now()}`,
-        title: 'Hoja Vinculada',
-        body: `ID ${cleanId.slice(0, 8)}... guardado. Recuerda compartirla en Google Drive como "Cualquier persona con el enlace puede leer".`,
-        timestamp: new Date().toLocaleTimeString(),
-      });
-    } finally {
-      setIsSyncing(false);
-    }
-  };
 
   // Save new / modified Comanda (From Waiter POS)
   const handleSaveComanda = async (comandaData: {
@@ -1297,34 +946,8 @@ export default function App() {
       }, 700);
     }
 
-    // 4. If Google Sheets is connected, append row to 'Comandas' sheet!
-    const targetSheetId = restaurantInfo.googleSheetId || spreadsheetId;
-    const token = await getAccessToken();
-    if (token && targetSheetId) {
-      appendRowToGoogleSheet(token, targetSheetId, 'Comandas', [
-        newComanda.idComanda,
-        newComanda.idMesa,
-        JSON.stringify(newComanda.listaItems),
-        newComanda.total,
-        newComanda.estado,
-        newComanda.timestamp,
-      ]).catch((err) => console.warn('Background sheet append comanda:', err));
-    }
-    // Also dispatch to backend server proxy so staff devices record into Sheet without individual Google login!
-    if (targetSheetId) {
-      appendRowViaServer(
-        'Comandas',
-        [
-          newComanda.idComanda,
-          newComanda.idMesa,
-          JSON.stringify(newComanda.listaItems),
-          newComanda.total,
-          newComanda.estado,
-          newComanda.timestamp,
-        ],
-        targetSheetId
-      ).catch(() => {});
-    }
+    // Live sync to MongoDB Atlas if connected
+    liveUpsertComandaToMongo(newComanda).catch(() => {});
   };
 
   // Update comanda status (e.g. from KDS Kitchen Display)
@@ -1405,26 +1028,14 @@ export default function App() {
       audioService.playSuccessTone();
     }
 
-    // Sync to Google Sheets if connected
-    const token = await getAccessToken();
-    if (token && spreadsheetId) {
-      // Re-sync comandas in background
-      const updatedComandas = comandas.map((c) =>
-        c.idComanda === comandaId ? { ...c, estado: newStatus } : c
-      );
-      syncSheetFullRows(
-        token,
-        spreadsheetId,
-        'Comandas',
-        updatedComandas.map((c) => [
-          c.idComanda,
-          c.idMesa,
-          JSON.stringify(c.listaItems),
-          c.total,
-          c.estado,
-          c.timestamp,
-        ])
-      ).catch((e) => console.warn('Could not sync comanda status to sheets:', e));
+    // Live sync comanda status update to MongoDB Atlas
+    if (targetComanda) {
+      liveUpsertComandaToMongo({
+        ...targetComanda,
+        estado: newStatus,
+        cocineroId: acting?.id,
+        cocineroNombre: acting?.nombre,
+      }).catch(() => {});
     }
   };
 
@@ -1796,55 +1407,6 @@ export default function App() {
     );
 
     audioService.playSuccessTone();
-
-    // 5. Append to Google Sheets 'Ventas' & 'Facturación'
-    const targetSheetId = restaurantInfo.googleSheetId || spreadsheetId;
-    const token = await getAccessToken();
-    if (token && targetSheetId) {
-      appendRowToGoogleSheet(token, targetSheetId, 'Ventas', [
-        newVenta.idVenta,
-        newVenta.idComanda,
-        newVenta.fecha,
-        newVenta.monto,
-        newVenta.metodoPago,
-      ]).catch((e) => console.warn(e));
-
-      appendRowToGoogleSheet(token, targetSheetId, 'Facturación', [
-        newFactura.idFactura,
-        newFactura.idVenta,
-        newFactura.fecha,
-        newFactura.nitCliente,
-        newFactura.monto,
-        newFactura.estado,
-      ]).catch((e) => console.warn(e));
-    }
-    // Also append via server proxy so cash register records without requiring cashier Google login
-    if (targetSheetId) {
-      appendRowViaServer(
-        'Ventas',
-        [
-          newVenta.idVenta,
-          newVenta.idComanda,
-          newVenta.fecha,
-          newVenta.monto,
-          newVenta.metodoPago,
-        ],
-        targetSheetId
-      ).catch(() => {});
-
-      appendRowViaServer(
-        'Facturación',
-        [
-          newFactura.idFactura,
-          newFactura.idVenta,
-          newFactura.fecha,
-          newFactura.nitCliente,
-          newFactura.monto,
-          newFactura.estado,
-        ],
-        targetSheetId
-      ).catch(() => {});
-    }
   };
 
   // Cash Register Handlers
@@ -2100,38 +1662,12 @@ export default function App() {
     }
   };
 
-  const syncStaffUsersToSheets = async (usersList: StaffUser[]) => {
-    const token = await getAccessToken();
-    if (token && spreadsheetId) {
-      try {
-        await syncSheetFullRows(
-          token,
-          spreadsheetId,
-          'Usuarios',
-          usersList.map((u) => [
-            u.id,
-            u.nombre,
-            u.rol,
-            u.pin,
-            u.activo ? 'SI' : 'NO',
-            u.telefono || '',
-            u.email || '',
-            u.ultimoAcceso || '',
-          ])
-        );
-      } catch (err) {
-        console.warn('Could not sync staff users to Google Sheets:', err);
-      }
-    }
-  };
-
   const handleAddStaffUser = (newUser: Omit<StaffUser, 'id'>) => {
     const nextId = `USR-${(staffUsers.length + 1).toString().padStart(3, '0')}`;
     const created: StaffUser = { ...newUser, id: nextId };
     const updated = [...staffUsers, created];
     setStaffUsers(updated);
     localStorage.setItem('restoflow_staff_users', JSON.stringify(updated));
-    syncStaffUsersToSheets(updated);
 
     if (created.rol === 'Cajero') {
       const newCajero: Cajero = {
@@ -2153,7 +1689,6 @@ export default function App() {
     const updated = staffUsers.map((u) => (u.id === updatedUser.id ? updatedUser : u));
     setStaffUsers(updated);
     localStorage.setItem('restoflow_staff_users', JSON.stringify(updated));
-    syncStaffUsersToSheets(updated);
     if (activeStaffUser?.id === updatedUser.id) {
       setActiveStaffUser(updatedUser);
     }
@@ -2165,7 +1700,6 @@ export default function App() {
     );
     setStaffUsers(updated);
     localStorage.setItem('restoflow_staff_users', JSON.stringify(updated));
-    syncStaffUsersToSheets(updated);
     if (activeStaffUser?.id === userId) {
       const activeRemaining = updated.find((u) => u.activo);
       setActiveStaffUser(activeRemaining || null);
@@ -2251,10 +1785,7 @@ export default function App() {
         onLogin={handleLogin}
         onLogout={handleLogout}
         isLoggingIn={isLoggingIn}
-        isSheetsConnected={isSheetsConnected}
-        spreadsheetTitle={spreadsheetTitle}
-        isSyncing={isSyncing}
-        onManualSync={() => handleSyncFromSheets()}
+        isMongoConnected={isMongoConnected}
       />
 
       {/* Floating Push Notification Toast */}
@@ -2480,34 +2011,27 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'sheets' && (
-          <SheetsSyncManager
-            user={user}
-            onLogin={handleLogin}
-            isLoggingIn={isLoggingIn}
-            spreadsheetId={spreadsheetId}
-            spreadsheetTitle={spreadsheetTitle}
-            spreadsheetUrl={spreadsheetUrl}
-            isSheetsConnected={isSheetsConnected}
-            isSyncing={isSyncing}
-            lastSyncTime={lastSyncTime}
-            onConnectExistingSheet={handleConnectExistingSheet}
-            onCreateNewSheet={handleCreateNewSheet}
-            onSyncAll={handleSyncAllToSheets}
-            counts={{
-              menu: menu.length,
-              tables: tables.length,
-              comandas: comandas.length,
-              ventas: ventas.length,
-              compras: compras.length,
-              proveedores: proveedores.length,
-              clientes: clientes.length,
-              facturas: facturas.length,
-              reservas: reservas.length,
-              staffUsers: staffUsers.length,
-            }}
-            onOpenDomainHelp={() => setIsUnauthorizedDomainOpen(true)}
-          />
+        {activeTab === 'database' && (
+          <div className="space-y-6">
+            <MongoAtlasManager
+              currentData={{
+                menu,
+                tables,
+                comandas,
+                ventas,
+                clientes,
+                proveedores,
+                compras,
+                facturas,
+                reservas,
+                staffUsers,
+                restaurantInfo,
+              }}
+              onApplyPulledData={handleApplyMongoData}
+              isAdmin={activeStaffUser?.rol === 'Administrador'}
+              onRequireAdminAuth={requireAdminAuth}
+            />
+          </div>
         )}
       </main>
 
@@ -2614,6 +2138,7 @@ export default function App() {
         currentInfo={restaurantInfo}
         isAdmin={activeStaffUser?.rol === 'Administrador'}
         onRequireAdminAuth={requireAdminAuth}
+        onNavigateToDatabase={() => setActiveTab('database')}
         onOpenResetData={() =>
           requireAdminAuth(
             () => setIsResetDataModalOpen(true),
@@ -2632,19 +2157,6 @@ export default function App() {
           }
           setRestaurantInfo(updated);
           saveRestaurantInfo(updated);
-          if (updated.googleSheetId) {
-            setSpreadsheetId(updated.googleSheetId);
-            localStorage.setItem('restoflow_global_sheet_id', updated.googleSheetId);
-            localStorage.setItem('restoflow_sheet_id', updated.googleSheetId);
-            setIsSheetsConnected(true);
-            getAccessToken().then((token) => {
-              if (token) {
-                handleSyncFromSheets(token, updated.googleSheetId);
-              } else {
-                handleSyncWithoutAuth(updated.googleSheetId);
-              }
-            });
-          }
           recordAuditLog({
             accion: 'Información del restaurante modificada',
             categoria: 'administracion',

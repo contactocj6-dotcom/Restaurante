@@ -255,7 +255,7 @@ async function startServer() {
   });
 
   // ==========================================
-  // GOOGLE SHEETS CENTRALIZED INTEGRATION & PROXY
+  // DATA STORAGE DIRECTORY
   // ==========================================
   const fs = await import('fs');
   const dataDir = path.resolve(__dirname, 'data');
@@ -266,339 +266,495 @@ async function startServer() {
       // Ignore if exists
     }
   }
-  const configFilePath = path.resolve(dataDir, 'sheets-config.json');
 
-  interface SheetsServerConfig {
-    googleSheetUrl: string;
-    googleSheetId: string;
-    sheetTitle: string;
-    autoSyncEnabled: boolean;
-    adminToken?: string;
-    adminEmail?: string;
-    webhookUrl?: string;
+  // ==========================================
+  // MONGODB ATLAS NATIVE CLOUD INTEGRATION
+  // ==========================================
+  const mongoConfigPath = path.resolve(dataDir, 'mongo-config.json');
+
+  interface MongoServerConfig {
+    uri: string;
+    dbName: string;
+    autoSync: boolean;
     lastSyncTime?: string;
   }
 
-  let sheetsConfig: SheetsServerConfig = {
-    googleSheetUrl: '',
-    googleSheetId: '',
-    sheetTitle: 'RestoFlow - Hoja Principal',
-    autoSyncEnabled: true,
+  let mongoConfig: MongoServerConfig = {
+    uri: process.env.MONGODB_URI || '',
+    dbName: process.env.MONGODB_DB_NAME || 'restoflow',
+    autoSync: true,
   };
 
   try {
-    if (fs.existsSync(configFilePath)) {
-      const savedRaw = fs.readFileSync(configFilePath, 'utf-8');
-      sheetsConfig = { ...sheetsConfig, ...JSON.parse(savedRaw) };
+    if (fs.existsSync(mongoConfigPath)) {
+      const savedMongo = fs.readFileSync(mongoConfigPath, 'utf-8');
+      mongoConfig = { ...mongoConfig, ...JSON.parse(savedMongo) };
     }
   } catch (e) {
-    console.warn('[Sheets Config] Error reading sheets-config.json, using defaults');
+    console.warn('[Mongo Config] Error reading mongo-config.json:', e);
   }
 
-  function extractSheetId(input: string): string {
-    const trimmed = (input || '').trim();
-    const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-    if (match && match[1]) {
-      return match[1];
-    }
-    return trimmed;
-  }
+  let activeMongoClient: any = null;
 
-  // Get current restaurant sheet configuration (all devices retrieve this on launch)
-  app.get('/api/sheets/config', (_req, res) => {
-    res.json({
-      googleSheetUrl: sheetsConfig.googleSheetUrl,
-      googleSheetId: sheetsConfig.googleSheetId,
-      sheetTitle: sheetsConfig.sheetTitle,
-      autoSyncEnabled: sheetsConfig.autoSyncEnabled,
-      hasAdminToken: !!sheetsConfig.adminToken,
-      hasWebhook: !!sheetsConfig.webhookUrl,
-      lastSyncTime: sheetsConfig.lastSyncTime,
-      isConfigured: !!sheetsConfig.googleSheetId,
-    });
-  });
+  async function getMongoClient(overrideUri?: string, overrideDb?: string) {
+    const targetUri = overrideUri || mongoConfig.uri;
+    if (!targetUri) return null;
 
-  // Save / update restaurant sheet configuration (done by Admin once)
-  app.post('/api/sheets/config', (req, res) => {
-    const {
-      googleSheetUrl,
-      sheetTitle,
-      autoSyncEnabled,
-      adminToken,
-      adminEmail,
-      webhookUrl,
-    } = req.body;
-
-    const sheetId = extractSheetId(googleSheetUrl || sheetsConfig.googleSheetUrl);
-    sheetsConfig = {
-      ...sheetsConfig,
-      googleSheetUrl: googleSheetUrl !== undefined ? googleSheetUrl : sheetsConfig.googleSheetUrl,
-      googleSheetId: sheetId,
-      sheetTitle: sheetTitle || sheetsConfig.sheetTitle,
-      autoSyncEnabled: autoSyncEnabled !== undefined ? Boolean(autoSyncEnabled) : sheetsConfig.autoSyncEnabled,
-      adminToken: adminToken !== undefined ? adminToken : sheetsConfig.adminToken,
-      adminEmail: adminEmail !== undefined ? adminEmail : sheetsConfig.adminEmail,
-      webhookUrl: webhookUrl !== undefined ? webhookUrl : sheetsConfig.webhookUrl,
-      lastSyncTime: new Date().toISOString(),
-    };
-
-    try {
-      fs.writeFileSync(configFilePath, JSON.stringify(sheetsConfig, null, 2), 'utf-8');
-    } catch (e) {
-      console.warn('[Sheets Config] Error writing sheets-config.json:', e);
-    }
-
-    // Broadcast update via SSE to all active client screens (meseros, cocina, caja)
-    sseClients.forEach((client) => {
+    if (activeMongoClient && !overrideUri) {
       try {
-        client.res.write(
-          `data: ${JSON.stringify({
-            type: 'SHEETS_CONFIG_UPDATED',
-            config: {
-              googleSheetId: sheetsConfig.googleSheetId,
-              googleSheetUrl: sheetsConfig.googleSheetUrl,
-              sheetTitle: sheetsConfig.sheetTitle,
-              autoSyncEnabled: sheetsConfig.autoSyncEnabled,
-            },
-          })}\n\n`
-        );
-      } catch (err) {
-        // Ignore
+        await activeMongoClient.db(mongoConfig.dbName).command({ ping: 1 });
+        return activeMongoClient;
+      } catch {
+        try {
+          await activeMongoClient.close();
+        } catch {
+          // ignore
+        }
+        activeMongoClient = null;
       }
-    });
-
-    console.log(`[Sheets Config] Configuración guardada para hoja ID: "${sheetId}"`);
-    res.json({
-      success: true,
-      config: {
-        googleSheetId: sheetsConfig.googleSheetId,
-        googleSheetUrl: sheetsConfig.googleSheetUrl,
-        sheetTitle: sheetsConfig.sheetTitle,
-        autoSyncEnabled: sheetsConfig.autoSyncEnabled,
-        isConfigured: !!sheetsConfig.googleSheetId,
-      },
-    });
-  });
-
-  // Validate Google Sheet ID and check permissions
-  app.get('/api/sheets/validate', async (req, res) => {
-    const rawId = (req.query.sheetId as string) || sheetsConfig.googleSheetId;
-    if (!rawId) {
-      return res.status(400).json({
-        status: 'error',
-        valid: false,
-        message: 'No se ha proporcionado un ID de Google Sheets',
-      });
     }
 
-    const cleanId = extractSheetId(rawId);
-    if (!cleanId || cleanId.length < 15) {
-      return res.status(200).json({
-        status: 'invalid',
-        valid: false,
-        cleanId,
-        message: 'El ID o enlace no tiene una estructura válida de Google Sheets.',
+    const { MongoClient, ServerApiVersion } = await import('mongodb');
+    const client = new MongoClient(targetUri, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: false,
+        deprecationErrors: true,
+      },
+      connectTimeoutMS: 8000,
+      serverSelectionTimeoutMS: 8000,
+    });
+
+    await client.connect();
+    if (!overrideUri) {
+      activeMongoClient = client;
+    }
+    return client;
+  }
+
+  // Obfuscate credentials for safe client display
+  function sanitizeMongoUri(uri: string): string {
+    if (!uri) return '';
+    return uri.replace(/\/\/([^:]+):([^@]+)@/, '//$1:••••••••@');
+  }
+
+  // Get current MongoDB connection status and collection statistics
+  app.get('/api/mongo/status', async (_req, res) => {
+    if (!mongoConfig.uri) {
+      return res.json({
+        configured: false,
+        connected: false,
+        dbName: mongoConfig.dbName,
+        message: 'MongoDB Atlas aún no está configurado. Conéctalo ingresando la cadena de conexión en el panel.',
       });
     }
 
     try {
-      const targetUrl = `https://docs.google.com/spreadsheets/d/${cleanId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent('Menú')}`;
-      const response = await fetch(targetUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 RestoFlow-Validation-Agent',
+      const client = await getMongoClient();
+      if (!client) {
+        return res.json({
+          configured: true,
+          connected: false,
+          dbName: mongoConfig.dbName,
+          sanitizedUri: sanitizeMongoUri(mongoConfig.uri),
+          message: 'No se pudo inicializar el cliente de MongoDB',
+        });
+      }
+
+      const db = client.db(mongoConfig.dbName);
+      await db.command({ ping: 1 });
+
+      // Gather collection counts in parallel
+      const collections = [
+        'menu',
+        'mesas',
+        'comandas',
+        'ventas',
+        'clientes',
+        'proveedores',
+        'compras',
+        'facturas',
+        'reservas',
+        'usuarios',
+      ];
+
+      const counts: Record<string, number> = {};
+      await Promise.all(
+        collections.map(async (collName) => {
+          try {
+            counts[collName] = await db.collection(collName).countDocuments();
+          } catch {
+            counts[collName] = 0;
+          }
+        })
+      );
+
+      return res.json({
+        configured: true,
+        connected: true,
+        dbName: mongoConfig.dbName,
+        sanitizedUri: sanitizeMongoUri(mongoConfig.uri),
+        autoSync: mongoConfig.autoSync,
+        lastSyncTime: mongoConfig.lastSyncTime,
+        counts,
+        message: 'Conectado exitosamente a MongoDB Atlas',
+      });
+    } catch (err: any) {
+      return res.json({
+        configured: true,
+        connected: false,
+        dbName: mongoConfig.dbName,
+        sanitizedUri: sanitizeMongoUri(mongoConfig.uri),
+        error: err?.message || String(err),
+        message: 'Error al conectar con MongoDB Atlas. Revisa usuario, contraseña y la lista de acceso IP en Atlas (0.0.0.0/0).',
+      });
+    }
+  });
+
+  // Test connection to a MongoDB Atlas URI without persisting
+  app.post('/api/mongo/test', async (req, res) => {
+    const { uri, dbName = 'restoflow' } = req.body;
+    if (!uri) {
+      return res.status(400).json({ success: false, message: 'La cadena de conexión es requerida' });
+    }
+
+    const startTime = Date.now();
+    let tempClient: any = null;
+    try {
+      const { MongoClient, ServerApiVersion } = await import('mongodb');
+      tempClient = new MongoClient(uri, {
+        serverApi: {
+          version: ServerApiVersion.v1,
+          strict: false,
+          deprecationErrors: true,
         },
-        redirect: 'follow',
+        connectTimeoutMS: 9000,
+        serverSelectionTimeoutMS: 9000,
       });
 
-      const finalUrl = response.url || '';
-      const text = await response.text();
+      await tempClient.connect();
+      const db = tempClient.db(dbName);
+      await db.command({ ping: 1 });
+      const latency = Date.now() - startTime;
 
-      const isLoginRedirect =
-        finalUrl.includes('accounts.google.com') ||
-        finalUrl.includes('ServiceLogin') ||
-        text.includes('accounts.google.com') ||
-        text.includes('ServiceLogin') ||
-        text.includes('Sign in - Google Accounts') ||
-        text.includes('Iniciar sesión') ||
-        text.includes('access_denied') ||
-        text.includes('user_not_authorized');
-
-      if (isLoginRedirect || response.status === 401 || response.status === 403) {
-        return res.json({
-          status: 'needs_permission',
-          valid: false,
-          cleanId,
-          message: 'Requiere permisos de lectura en Google Drive',
-          details: 'La hoja existe pero está configurada como privada. Cambia el acceso general a "Cualquier persona que tenga el vínculo puede ver (Lector)".',
-        });
+      let collList: string[] = [];
+      try {
+        const collections = await db.listCollections().toArray();
+        collList = collections.map((c: any) => c.name);
+      } catch {
+        // ignore
       }
 
-      if (
-        response.status === 404 ||
-        text.includes('File not found') ||
-        text.includes('Documento no encontrado') ||
-        text.includes('file you have requested does not exist') ||
-        text.includes('reason:not_found')
-      ) {
-        return res.json({
-          status: 'not_found',
-          valid: false,
-          cleanId,
-          message: 'Hoja de cálculo no encontrada',
-          details: 'Verifica que el ID sea correcto y que el archivo exista en Google Drive.',
-        });
-      }
+      await tempClient.close();
 
-      const start = text.indexOf('{');
-      const end = text.lastIndexOf('}');
-      if (start !== -1 && end !== -1) {
+      return res.json({
+        success: true,
+        latencyMs: latency,
+        dbName,
+        collectionsFound: collList,
+        message: `¡Conexión a MongoDB Atlas verificada exitosamente! Latencia: ${latency}ms.`,
+      });
+    } catch (err: any) {
+      if (tempClient) {
         try {
-          const jsonStr = text.substring(start, end + 1);
-          const data = JSON.parse(jsonStr);
-
-          if (data.status === 'error') {
-            const errReason = data.errors?.[0]?.reason || '';
-            const errMsg = data.errors?.[0]?.detailed_message || data.errors?.[0]?.message || '';
-
-            if (errReason === 'access_denied' || errMsg.includes('denied') || errMsg.includes('permission')) {
-              return res.json({
-                status: 'needs_permission',
-                valid: false,
-                cleanId,
-                message: 'Requiere permisos de lectura en Google Drive',
-                details: 'La hoja está protegida. Cambia el acceso general a "Cualquier persona con el vínculo".',
-              });
-            }
-
-            if (errReason === 'not_found') {
-              return res.json({
-                status: 'not_found',
-                valid: false,
-                cleanId,
-                message: 'Hoja no encontrada o pestaña no existe',
-                details: errMsg,
-              });
-            }
-          }
-
-          const rowsCount = data.table?.rows?.length || 0;
-          return res.json({
-            status: 'active',
-            valid: true,
-            cleanId,
-            message: 'Conexión Activa y Verificada',
-            details: `Lectura pública habilitada exitosamente. Se detectaron ${rowsCount} registros en la pestaña "Menú".`,
-            menuRowsCount: rowsCount,
-          });
+          await tempClient.close();
         } catch {
           // ignore
         }
       }
-
-      if (response.ok) {
-        return res.json({
-          status: 'active',
-          valid: true,
-          cleanId,
-          message: 'Conexión Activa y Verificada',
-          details: 'La hoja de cálculo responde correctamente para sincronización pública.',
-        });
-      }
-
-      return res.json({
-        status: 'error',
-        valid: false,
-        cleanId,
-        message: `Respuesta inesperada de Google (HTTP ${response.status})`,
-      });
-    } catch (err: any) {
-      return res.json({
-        status: 'error',
-        valid: false,
-        cleanId,
-        message: `Error al contactar con Google Sheets: ${err?.message || err}`,
+      return res.status(400).json({
+        success: false,
+        error: err?.message || String(err),
+        message:
+          'Error al conectar con MongoDB Atlas. Asegúrate de: 1) Permitir acceso desde cualquier IP (0.0.0.0/0) en Network Access de Atlas. 2) Verificar usuario y contraseña sin caracteres especiales no codificados.',
       });
     }
   });
 
-  // Proxy GViz public query to avoid browser CORS and network issues
-  app.get('/api/sheets/proxy-gviz', async (req, res) => {
-    const sheetId = (req.query.sheetId as string) || sheetsConfig.googleSheetId;
-    const sheetName = (req.query.sheet as string) || 'Menú';
-
-    if (!sheetId) {
-      return res.status(400).json({ error: 'No se ha configurado ninguna hoja de Google Sheets en el restaurante' });
+  // Save MongoDB connection config and initialize
+  app.post('/api/mongo/config', async (req, res) => {
+    const { uri, dbName = 'restoflow', autoSync = true } = req.body;
+    if (!uri) {
+      return res.status(400).json({ success: false, message: 'Cadena de conexión requerida' });
     }
 
-    const targetUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
     try {
-      const gvizRes = await fetch(targetUrl);
-      const text = await gvizRes.text();
-      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-      res.send(text);
+      const { MongoClient, ServerApiVersion } = await import('mongodb');
+      const testClient = new MongoClient(uri, {
+        serverApi: {
+          version: ServerApiVersion.v1,
+          strict: false,
+          deprecationErrors: true,
+        },
+        connectTimeoutMS: 9000,
+        serverSelectionTimeoutMS: 9000,
+      });
+
+      await testClient.connect();
+      await testClient.db(dbName).command({ ping: 1 });
+
+      if (activeMongoClient) {
+        try {
+          await activeMongoClient.close();
+        } catch {}
+      }
+      activeMongoClient = testClient;
+
+      mongoConfig = {
+        uri,
+        dbName,
+        autoSync: Boolean(autoSync),
+        lastSyncTime: new Date().toISOString(),
+      };
+
+      try {
+        fs.writeFileSync(mongoConfigPath, JSON.stringify(mongoConfig, null, 2), 'utf-8');
+      } catch (e) {
+        console.warn('[Mongo Config] Error writing mongo-config.json:', e);
+      }
+
+      // Notify clients
+      sseClients.forEach((client) => {
+        try {
+          client.res.write(
+            `data: ${JSON.stringify({
+              type: 'MONGO_CONFIG_UPDATED',
+              config: {
+                configured: true,
+                connected: true,
+                dbName,
+                sanitizedUri: sanitizeMongoUri(uri),
+              },
+            })}\n\n`
+          );
+        } catch {}
+      });
+
+      return res.json({
+        success: true,
+        connected: true,
+        dbName,
+        sanitizedUri: sanitizeMongoUri(uri),
+        message: 'Configuración de MongoDB Atlas guardada y conexión establecida.',
+      });
     } catch (err: any) {
-      res.status(502).json({ error: `Error conectando con Google GViz: ${err?.message || err}` });
+      return res.status(400).json({
+        success: false,
+        error: err?.message || String(err),
+        message: 'No se pudo conectar a MongoDB Atlas con las credenciales proporcionadas.',
+      });
     }
   });
 
-  // Server-side Append Row proxy (allows waitresses/cashiers to record into Sheet without logging in)
-  app.post('/api/sheets/append-row', async (req, res) => {
-    const { sheetName, rowValues, spreadsheetId: reqSheetId } = req.body;
-    const targetSheetId = reqSheetId || sheetsConfig.googleSheetId;
-
-    if (!targetSheetId) {
-      return res.status(400).json({ error: 'No hay hoja configurada para registrar' });
-    }
-
-    // 1. If Webhook URL is set (Google Apps Script)
-    if (sheetsConfig.webhookUrl) {
+  // Disconnect / Clear MongoDB config
+  app.post('/api/mongo/disconnect', async (_req, res) => {
+    if (activeMongoClient) {
       try {
-        const hookRes = await fetch(sheetsConfig.webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'appendRow',
-            sheetName,
-            rowValues,
-            spreadsheetId: targetSheetId,
-            timestamp: new Date().toISOString(),
-          }),
-        });
-        const hookData = await hookRes.json().catch(() => ({}));
-        return res.json({ success: true, via: 'webhook', result: hookData });
-      } catch (e: any) {
-        console.warn('[Sheets Webhook] Error dispatching webhook:', e);
-      }
+        await activeMongoClient.close();
+      } catch {}
+      activeMongoClient = null;
     }
 
-    // 2. If Admin token is cached in server
-    if (sheetsConfig.adminToken) {
+    mongoConfig = {
+      uri: '',
+      dbName: 'restoflow',
+      autoSync: false,
+    };
+
+    try {
+      fs.writeFileSync(mongoConfigPath, JSON.stringify(mongoConfig, null, 2), 'utf-8');
+    } catch {}
+
+    sseClients.forEach((client) => {
       try {
-        const url = `https://sheets.googleapis.com/v4/spreadsheets/${targetSheetId}/values/${encodeURIComponent(sheetName)}!A1:append?valueInputOption=USER_ENTERED`;
-        const gRes = await fetch(url, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${sheetsConfig.adminToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            values: [rowValues],
-          }),
-        });
-        if (gRes.ok) {
-          return res.json({ success: true, via: 'adminToken' });
-        }
-      } catch (e) {
-        console.warn('[Sheets Admin Token] Error with cached token:', e);
-      }
-    }
-
-    // Fallback: acknowledged
-    res.json({
-      success: true,
-      via: 'localProxyQueue',
-      message: 'Fila registrada en el servidor de RestoFlow. Para sincronización directa en la nube de Google, el Administrador puede autenticarse o configurar el webhook.',
+        client.res.write(
+          `data: ${JSON.stringify({
+            type: 'MONGO_DISCONNECTED',
+          })}\n\n`
+        );
+      } catch {}
     });
+
+    res.json({ success: true, message: 'Desconectado de MongoDB Atlas' });
+  });
+
+  // Push all restaurant state from client to MongoDB Atlas (Bulk Upsert)
+  app.post('/api/mongo/push-all', async (req, res) => {
+    const { data } = req.body;
+    if (!data) {
+      return res.status(400).json({ success: false, message: 'Datos requeridos para exportar' });
+    }
+
+    try {
+      const client = await getMongoClient();
+      if (!client) {
+        return res.status(400).json({ success: false, message: 'MongoDB Atlas no está conectado' });
+      }
+
+      const db = client.db(mongoConfig.dbName);
+      const results: Record<string, number> = {};
+
+      // Helper function to bulk upsert by key
+      async function bulkUpsert(collName: string, items: any[], keyField: string) {
+        if (!Array.isArray(items) || items.length === 0) return 0;
+        const coll = db.collection(collName);
+        const operations = items.map((item) => ({
+          updateOne: {
+            filter: { [keyField]: item[keyField] },
+            update: { $set: item },
+            upsert: true,
+          },
+        }));
+        const res = await coll.bulkWrite(operations, { ordered: false });
+        return (res.upsertedCount || 0) + (res.modifiedCount || 0) + (res.matchedCount || 0);
+      }
+
+      if (data.menu) results.menu = await bulkUpsert('menu', data.menu, 'id');
+      if (data.tables) results.mesas = await bulkUpsert('mesas', data.tables, 'id');
+      if (data.comandas) results.comandas = await bulkUpsert('comandas', data.comandas, 'idComanda');
+      if (data.ventas) results.ventas = await bulkUpsert('ventas', data.ventas, 'idVenta');
+      if (data.clientes) results.clientes = await bulkUpsert('clientes', data.clientes, 'id');
+      if (data.proveedores) results.proveedores = await bulkUpsert('proveedores', data.proveedores, 'id');
+      if (data.compras) results.compras = await bulkUpsert('compras', data.compras, 'idCompra');
+      if (data.facturas) results.facturas = await bulkUpsert('facturas', data.facturas, 'idFactura');
+      if (data.reservas) results.reservas = await bulkUpsert('reservas', data.reservas, 'id');
+      if (data.staffUsers) results.usuarios = await bulkUpsert('usuarios', data.staffUsers, 'id');
+
+      if (data.restaurantInfo) {
+        await db.collection('restaurantConfig').updateOne(
+          { key: 'dianCompanyInfo' },
+          { $set: { key: 'dianCompanyInfo', ...data.restaurantInfo, updatedAt: new Date().toISOString() } },
+          { upsert: true }
+        );
+        results.restaurantInfo = 1;
+      }
+
+      mongoConfig.lastSyncTime = new Date().toISOString();
+      try {
+        fs.writeFileSync(mongoConfigPath, JSON.stringify(mongoConfig, null, 2), 'utf-8');
+      } catch {}
+
+      return res.json({
+        success: true,
+        lastSyncTime: mongoConfig.lastSyncTime,
+        counts: results,
+        message: '¡Datos sincronizados exitosamente con MongoDB Atlas!',
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || String(err),
+        message: 'Error al sincronizar datos hacia MongoDB Atlas',
+      });
+    }
+  });
+
+  // Pull all restaurant collections from MongoDB Atlas
+  app.get('/api/mongo/pull-all', async (_req, res) => {
+    try {
+      const client = await getMongoClient();
+      if (!client) {
+        return res.status(400).json({ success: false, message: 'MongoDB Atlas no está conectado' });
+      }
+
+      const db = client.db(mongoConfig.dbName);
+
+      // Clean _id field from MongoDB docs to preserve React state clean types
+      const cleanDocs = (docs: any[]) =>
+        docs.map(({ _id, ...rest }) => rest);
+
+      const [
+        menuDocs,
+        mesasDocs,
+        comandasDocs,
+        ventasDocs,
+        clientesDocs,
+        proveedoresDocs,
+        comprasDocs,
+        facturasDocs,
+        reservasDocs,
+        usuariosDocs,
+        configDoc,
+      ] = await Promise.all([
+        db.collection('menu').find({}).toArray(),
+        db.collection('mesas').find({}).toArray(),
+        db.collection('comandas').find({}).toArray(),
+        db.collection('ventas').find({}).toArray(),
+        db.collection('clientes').find({}).toArray(),
+        db.collection('proveedores').find({}).toArray(),
+        db.collection('compras').find({}).toArray(),
+        db.collection('facturas').find({}).toArray(),
+        db.collection('reservas').find({}).toArray(),
+        db.collection('usuarios').find({}).toArray(),
+        db.collection('restaurantConfig').findOne({ key: 'dianCompanyInfo' }),
+      ]);
+
+      let restaurantInfo = null;
+      if (configDoc) {
+        const { _id, key, ...rest } = configDoc;
+        restaurantInfo = rest;
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          menu: cleanDocs(menuDocs),
+          tables: cleanDocs(mesasDocs),
+          comandas: cleanDocs(comandasDocs),
+          ventas: cleanDocs(ventasDocs),
+          clientes: cleanDocs(clientesDocs),
+          proveedores: cleanDocs(proveedoresDocs),
+          compras: cleanDocs(comprasDocs),
+          facturas: cleanDocs(facturasDocs),
+          reservas: cleanDocs(reservasDocs),
+          staffUsers: cleanDocs(usuariosDocs),
+          restaurantInfo,
+        },
+        counts: {
+          menu: menuDocs.length,
+          tables: mesasDocs.length,
+          comandas: comandasDocs.length,
+          ventas: ventasDocs.length,
+          clientes: clientesDocs.length,
+          proveedores: proveedoresDocs.length,
+          compras: comprasDocs.length,
+          facturas: facturasDocs.length,
+          reservas: reservasDocs.length,
+          staffUsers: usuariosDocs.length,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        error: err?.message || String(err),
+        message: 'Error al recuperar colecciones desde MongoDB Atlas',
+      });
+    }
+  });
+
+  // Live single-comanda upsert to MongoDB Atlas
+  app.post('/api/mongo/upsert-comanda', async (req, res) => {
+    const { comanda } = req.body;
+    if (!comanda || !comanda.idComanda) {
+      return res.status(400).json({ success: false, message: 'Comanda requerida' });
+    }
+
+    try {
+      const client = await getMongoClient();
+      if (client) {
+        const db = client.db(mongoConfig.dbName);
+        await db.collection('comandas').updateOne(
+          { idComanda: comanda.idComanda },
+          { $set: comanda },
+          { upsert: true }
+        );
+      }
+      res.json({ success: true });
+    } catch (err: any) {
+      console.warn('[Mongo live comanda upsert error]:', err?.message);
+      res.json({ success: false, error: err?.message });
+    }
   });
 
   // Vite middleware in dev or static files in production

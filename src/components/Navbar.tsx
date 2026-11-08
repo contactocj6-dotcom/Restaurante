@@ -3,7 +3,7 @@ import {
   UtensilsCrossed,
   Bell,
   BellOff,
-  FileSpreadsheet,
+  Database,
   Layers,
   ChefHat,
   Receipt,
@@ -34,7 +34,7 @@ export type ActiveTab =
   | 'menu'
   | 'inventario'
   | 'clientes'
-  | 'sheets';
+  | 'database';
 
 interface NavbarProps {
   activeTab: ActiveTab;
@@ -47,10 +47,7 @@ interface NavbarProps {
   onLogin: () => void;
   onLogout: () => void;
   isLoggingIn: boolean;
-  isSheetsConnected: boolean;
-  spreadsheetTitle?: string;
-  isSyncing: boolean;
-  onManualSync: () => void;
+  isMongoConnected?: boolean;
   lowStockCount?: number;
   cajaAbierta?: boolean;
   activeCajeroNombre?: string;
@@ -84,10 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogin,
   onLogout,
   isLoggingIn,
-  isSheetsConnected,
-  spreadsheetTitle,
-  isSyncing,
-  onManualSync,
+  isMongoConnected = false,
 }) => {
   return (
     <header className="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800">
@@ -209,39 +203,31 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="hidden xl:inline">Puesta a Cero</span>
             </button>
           )}
-          {/* Sheets Status indicator */}
+          {/* Database & Cloud Status indicator */}
           <button
-            onClick={() => setActiveTab('sheets')}
+            onClick={() => setActiveTab('database')}
             className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
-              isSheetsConnected
-                ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/60 hover:bg-emerald-900/40'
+              isMongoConnected
+                ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/60 hover:bg-emerald-900/60 shadow-sm shadow-emerald-500/20'
                 : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200'
             }`}
-            title={isSheetsConnected ? `Conectado a Google Sheets: ${spreadsheetTitle || ''}` : 'Modo local. Haz clic para conectar Google Sheets'}
+            title={
+              isMongoConnected
+                ? 'Conectado a MongoDB Atlas (Base de datos Cloud activa y sincronizada)'
+                : 'Modo local (Sin conexión cloud). Haz clic para conectar MongoDB Atlas.'
+            }
           >
-            <FileSpreadsheet className={`w-3.5 h-3.5 ${isSheetsConnected ? 'text-emerald-400' : 'text-zinc-500'}`} />
-            <span className="hidden md:inline">
-              {isSheetsConnected ? (spreadsheetTitle ? `Sheets: ${spreadsheetTitle}` : 'Google Sheets Conectado') : 'Sheets: Modo Local'}
+            <Database className={`w-3.5 h-3.5 ${isMongoConnected ? 'text-emerald-400 animate-pulse' : 'text-zinc-500'}`} />
+            <span className="hidden md:inline font-semibold">
+              {isMongoConnected ? 'MongoDB Atlas ✓' : 'Nube: Modo Local'}
             </span>
             <span className="md:hidden">
-              {isSheetsConnected ? 'Sheets ✓' : 'Local'}
+              {isMongoConnected ? 'Mongo ✓' : 'Local'}
             </span>
-            {isSheetsConnected && (
+            {isMongoConnected && (
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             )}
           </button>
-
-          {/* Sync Trigger button */}
-          {isSheetsConnected && (
-            <button
-              onClick={onManualSync}
-              disabled={isSyncing}
-              title="Sincronizar ahora con Google Sheets"
-              className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 transition disabled:opacity-50"
-            >
-              <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin text-amber-400' : ''}`} />
-            </button>
-          )}
 
           {/* Sound Toggle */}
           <button
@@ -447,15 +433,18 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         <button
-          onClick={() => setActiveTab('sheets')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ml-auto transition ${
-            activeTab === 'sheets'
-              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-              : 'text-emerald-400/80 hover:text-emerald-300 hover:bg-zinc-900'
+          onClick={() => setActiveTab('database')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ml-auto transition cursor-pointer ${
+            activeTab === 'database'
+              ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 shadow-sm'
+              : 'text-emerald-400 hover:text-emerald-300 hover:bg-zinc-900'
           }`}
         >
-          <FileSpreadsheet className="w-4 h-4" />
-          <span>Google Sheets Sync</span>
+          <Database className="w-4 h-4 text-emerald-400" />
+          <span>Base de Datos (MongoDB Atlas)</span>
+          {isMongoConnected && (
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          )}
         </button>
       </div>
     </header>

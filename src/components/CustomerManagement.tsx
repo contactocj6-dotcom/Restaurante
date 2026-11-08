@@ -64,7 +64,7 @@ export const CustomerManagement: React.FC<CustomerManagementProps> = ({
               Base de Clientes & Fidelización
             </h2>
             <p className="text-xs text-zinc-400">
-              {clientes.length} clientes registrados • Sincronizado con Google Sheets 'Clientes'
+              {clientes.length} clientes registrados • Sincronizado en la nube con MongoDB Atlas
             </p>
           </div>
         </div>
