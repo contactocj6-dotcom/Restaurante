@@ -7,9 +7,19 @@ import {
   User,
   signOut,
 } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+// Initialize Firebase using import.meta.env environment variables
+const firebaseConfig = {
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'gen-lang-client-0083219337',
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || '1:779494736756:web:83fb6b49428c0e3103a221',
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || 'AIzaSyBrwHErhZOk4D8Ki4HRYmeI5kX49JtF1Dw',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'gen-lang-client-0083219337.firebaseapp.com',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'gen-lang-client-0083219337.firebasestorage.app',
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '779494736756',
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || '',
+  oAuthClientId: import.meta.env.VITE_FIREBASE_OAUTH_CLIENT_ID || '779494736756-m4t69t0vader1ark31940h862vntejiq.apps.googleusercontent.com',
+  recaptchaSiteKey: import.meta.env.VITE_FIREBASE_RECAPTCHA_SITE_KEY || '',
+};
 
-// Initialize Firebase
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 

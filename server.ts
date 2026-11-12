@@ -266,8 +266,12 @@ export async function createApp(includeVite = false) {
     lastSyncTime?: string;
   }
 
+  // 💡 Puedes pegar tu URI de MongoDB Atlas aquí directamente (ej: 'mongodb+srv://usuario:password@cluster.mongodb.net/?retryWrites=true&w=majority')
+  // o configurarla en la variable de entorno MONGODB_URI. Así el administrador no tendrá que ingresarla manualmente cada vez.
+  const DEFAULT_MONGODB_URI = process.env.MONGODB_URI || '';
+
   let mongoConfig: MongoServerConfig = {
-    uri: process.env.MONGODB_URI || '',
+    uri: DEFAULT_MONGODB_URI,
     dbName: process.env.MONGODB_DB_NAME || 'restoflow',
     autoSync: true,
   };
@@ -275,7 +279,14 @@ export async function createApp(includeVite = false) {
   try {
     if (fs.existsSync(mongoConfigPath)) {
       const savedMongo = fs.readFileSync(mongoConfigPath, 'utf-8');
-      mongoConfig = { ...mongoConfig, ...JSON.parse(savedMongo) };
+      const parsed = JSON.parse(savedMongo);
+      mongoConfig = {
+        ...mongoConfig,
+        ...parsed,
+        uri: parsed.uri || DEFAULT_MONGODB_URI,
+      };
+    } else if (DEFAULT_MONGODB_URI) {
+      fs.writeFileSync(mongoConfigPath, JSON.stringify(mongoConfig, null, 2), 'utf-8');
     }
   } catch (e) {
     console.warn('[Mongo Config] Error reading mongo-config.json:', e);
