@@ -231,23 +231,23 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
       </div>
 
       {/* Menu Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredMenu.map((dish) => (
           <div
             key={dish.id}
-            className={`p-4 rounded-2xl border transition bg-zinc-900/80 flex flex-col justify-between ${
+            className={`p-4 sm:p-5 rounded-2xl border transition bg-zinc-900/90 flex flex-col justify-between gap-3 shadow-lg ${
               dish.disponible
                 ? 'border-zinc-800 hover:border-zinc-700'
                 : 'border-zinc-800/50 opacity-60'
             }`}
           >
             <div>
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                 <div>
                   <span className="text-[10px] font-mono text-zinc-500 font-semibold">{dish.id}</span>
                   <h3 className="text-base font-bold text-white leading-snug">{dish.nombre}</h3>
                 </div>
-                <span className="text-base font-extrabold text-amber-400 font-mono">
+                <span className="text-base sm:text-lg font-extrabold text-amber-400 font-mono self-start sm:self-auto">
                   {formatCOP(dish.precio)}
                 </span>
               </div>
@@ -257,34 +257,34 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
               </p>
             </div>
 
-            <div className="mt-4 pt-3 border-t border-zinc-800/80 space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="px-2 py-0.5 rounded-md bg-zinc-800 text-[10px] text-zinc-300 font-medium">
+            <div className="pt-3 border-t border-zinc-800/80 space-y-3">
+              <div className="flex items-center justify-between text-xs flex-wrap gap-2">
+                <span className="px-2.5 py-1 rounded-md bg-zinc-800 text-[11px] text-zinc-300 font-medium">
                   {dish.categoria}
                 </span>
 
                 {/* Stock Level Badge */}
                 {dish.stockActual <= 0 ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                    <AlertTriangle className="w-3 h-3 text-rose-400" />
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                    <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
                     Sin Stock (0 uds)
                   </span>
                 ) : dish.stockActual <= dish.stockMinimo ? (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
-                    <AlertTriangle className="w-3 h-3 text-amber-400" />
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
                     Stock Bajo ({dish.stockActual} / mín {dish.stockMinimo})
                   </span>
                 ) : (
-                  <span className="text-[10px] font-semibold text-zinc-400 font-mono">
-                    Stock: <strong className="text-emerald-400">{dish.stockActual}</strong> uds (mín {dish.stockMinimo})
+                  <span className="text-[11px] font-semibold text-zinc-400 font-mono">
+                    Stock: <strong className="text-emerald-400">{dish.stockActual}</strong> uds
                   </span>
                 )}
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-1 border-t border-zinc-800/40">
+              <div className="flex items-center justify-end gap-2.5 pt-1 border-t border-zinc-800/40">
                 <button
                   onClick={() => onToggleAvailability(dish.id)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1 ${
+                  className={`px-3.5 py-2 sm:px-3 sm:py-1.5 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 touch-manipulation cursor-pointer ${
                     dish.disponible
                       ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/20'
                       : 'bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20'
@@ -293,12 +293,12 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
                 >
                   {dish.disponible ? (
                     <>
-                      <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
+                      <CheckCircle className="w-4 h-4 text-emerald-400" />
                       <span>Disponible</span>
                     </>
                   ) : (
                     <>
-                      <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                      <XCircle className="w-4 h-4 text-rose-400" />
                       <span>Agotado</span>
                     </>
                   )}
@@ -306,11 +306,12 @@ export const MenuManagement: React.FC<MenuManagementProps> = ({
 
                 <button
                   onClick={() => handleOpenEdit(dish)}
-                  className="p-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition flex items-center gap-1"
+                  className="px-3.5 py-2 sm:px-3 sm:py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white transition flex items-center gap-1.5 text-xs font-semibold touch-manipulation cursor-pointer"
                   title={isAdmin ? "Editar plato y precio" : "Editar plato (requiere PIN de Administrador)"}
                 >
-                  <Edit2 className="w-3.5 h-3.5" />
-                  {!isAdmin && <Lock className="w-2.5 h-2.5 text-amber-400" />}
+                  <Edit2 className="w-4 h-4 text-amber-400" />
+                  <span>Editar</span>
+                  {!isAdmin && <Lock className="w-3 h-3 text-amber-400" />}
                 </button>
               </div>
             </div>

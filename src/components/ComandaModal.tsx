@@ -195,8 +195,8 @@ export const ComandaModal: React.FC<ComandaModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-2 sm:p-4">
-      <div className="w-full max-w-5xl h-[92vh] flex flex-col bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto">
+      <div className="w-full h-[100dvh] sm:h-[92vh] sm:max-w-5xl flex flex-col bg-zinc-950 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-3xl overflow-y-auto sm:overflow-hidden shadow-2xl pb-24 sm:pb-0">
         {/* Modal Top Bar */}
         <div className="px-5 py-3.5 border-b border-zinc-800 flex items-center justify-between bg-zinc-900/80">
           <div className="flex items-center gap-3">

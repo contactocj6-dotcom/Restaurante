@@ -279,8 +279,8 @@ export const BillingModal: React.FC<BillingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="relative w-full max-w-xl bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden my-6 animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-0 sm:p-4 overflow-y-auto">
+      <div className="relative w-full h-[100dvh] sm:h-auto sm:max-h-[92vh] sm:max-w-xl bg-zinc-950 border-0 sm:border sm:border-zinc-800 rounded-none sm:rounded-3xl shadow-2xl overflow-y-auto my-0 sm:my-6 pb-24 sm:pb-6 animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-zinc-800 bg-zinc-900/60">
           <div className="flex items-center gap-3">

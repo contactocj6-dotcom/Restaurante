@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   UtensilsCrossed,
   Bell,
@@ -20,6 +20,8 @@ import {
   Lock,
   KeyRound,
   RotateCcw,
+  Menu,
+  X,
 } from 'lucide-react';
 import { User } from 'firebase/auth';
 import { StaffUser } from '../types/restaurant';
@@ -83,37 +85,39 @@ export const Navbar: React.FC<NavbarProps> = ({
   isLoggingIn,
   isMongoConnected = false,
 }) => {
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
   return (
-    <header className="sticky top-0 z-40 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800">
+    <header className="sticky top-0 z-40 bg-zinc-950/95 backdrop-blur-md border-b border-zinc-800">
       {/* Top Brand & Actions Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
         {/* Brand */}
         <button
           type="button"
           onClick={onOpenRestaurantProfile}
-          className="flex items-center gap-3 text-left group transition hover:opacity-95 focus:outline-none"
+          className="flex items-center gap-2.5 text-left group transition hover:opacity-95 focus:outline-none min-w-0 shrink"
           title="Ver o editar información del restaurante, NIT, dirección y redes"
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 via-orange-500 to-rose-500 p-0.5 shadow-lg shadow-orange-500/20 group-hover:scale-105 transition">
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-tr from-amber-600 via-orange-500 to-rose-500 p-0.5 shadow-lg shadow-orange-500/20 group-hover:scale-105 transition shrink-0">
             <div className="w-full h-full bg-zinc-950 rounded-[10px] flex items-center justify-center">
-              <UtensilsCrossed className="w-5 h-5 text-amber-400" />
+              <UtensilsCrossed className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" />
             </div>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-lg text-white tracking-tight truncate max-w-[140px] sm:max-w-[220px]">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="font-bold text-sm sm:text-lg text-white tracking-tight truncate max-w-[95px] sm:max-w-[200px]">
                 {restaurantName || 'RestoFlow'}
               </span>
-              <span className="text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              <span className="text-[10px] uppercase font-semibold px-1.5 py-0.2 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20 hidden sm:inline">
                 PRO
               </span>
             </div>
-            <p className="text-xs text-zinc-400 hidden sm:block">Gestión Gastronómica Full-Stack</p>
+            <p className="text-[11px] text-zinc-400 hidden sm:block">Gestión Gastronómica Full-Stack</p>
           </div>
         </button>
 
         {/* Center / Right controls */}
-        <div className="flex items-center gap-2 sm:gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Active Staff User & Shift Switcher */}
           {activeStaffUser ? (
             <div className="flex items-center gap-1.5">
@@ -147,7 +151,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={onOpenStaffManagement}
-                  className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition"
+                  className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800 transition hidden sm:flex"
                   title="Gestionar equipo, roles, PINs y registro de auditoría"
                 >
                   <Users className="w-3.5 h-3.5" />
@@ -158,7 +162,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={onLockTerminal}
-                  className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition"
+                  className="p-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-rose-400 border border-zinc-800 transition hidden sm:flex"
                   title="Bloquear terminal (requiere PIN para entrar)"
                 >
                   <Lock className="w-3.5 h-3.5" />
@@ -174,7 +178,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 title="Iniciar sesión con PIN de colaborador"
               >
                 <KeyRound className="w-3.5 h-3.5" />
-                <span>Ingresar PIN</span>
+                <span className="hidden sm:inline">Ingresar PIN</span>
+                <span className="sm:hidden">PIN</span>
               </button>
             )
           )}
@@ -196,17 +201,18 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={onOpenResetData}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-emerald-500/40 hover:text-emerald-300 transition shadow-sm"
+              className="hidden xl:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 hover:border-emerald-500/40 hover:text-emerald-300 transition shadow-sm"
               title="Puesta a Cero / Iniciar en Modo Producción (Acceso exclusivo Administrador)"
             >
               <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden xl:inline">Puesta a Cero</span>
+              <span>Puesta a Cero</span>
             </button>
           )}
+
           {/* Database & Cloud Status indicator */}
           <button
             onClick={() => setActiveTab('database')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
+            className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
               isMongoConnected
                 ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/60 hover:bg-emerald-900/60 shadow-sm shadow-emerald-500/20'
                 : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200'
@@ -242,10 +248,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             {soundEnabled ? <Bell className="w-4 h-4" /> : <BellOff className="w-4 h-4" />}
           </button>
 
-          {/* Auth State & Button */}
-          {/* Google Auth State - Subtle and non-intrusive for staff */}
+          {/* Google Auth State */}
           {user && (
-            <div className="flex items-center gap-2 pl-1">
+            <div className="hidden md:flex items-center gap-2 pl-1">
               <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl px-2.5 py-1">
                 {user.photoURL ? (
                   <img
@@ -258,12 +263,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {(user.displayName || user.email || 'A')[0].toUpperCase()}
                   </div>
                 )}
-                <span className="text-xs font-medium text-zinc-200 hidden lg:inline max-w-[120px] truncate">
+                <span className="text-xs font-medium text-zinc-200 max-w-[100px] truncate">
                   {user.displayName || user.email?.split('@')[0]}
                 </span>
                 <button
                   onClick={onLogout}
-                  title="Cerrar sesión de Google del Administrador"
+                  title="Cerrar sesión de Google"
                   className="text-zinc-400 hover:text-red-400 transition ml-1"
                 >
                   <LogOut className="w-3.5 h-3.5" />
@@ -271,14 +276,24 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             </div>
           )}
+
+          {/* Mobile Hamburger Menu Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white lg:hidden transition flex items-center justify-center"
+            title={isMobileMenuOpen ? 'Cerrar menú' : 'Abrir menú de navegación'}
+          >
+            {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
         </div>
       </div>
 
-      {/* Navigation Tabs Bar */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center overflow-x-auto no-scrollbar gap-1 py-1.5 border-t border-zinc-800/80">
+      {/* Desktop Navigation Tabs Bar */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 hidden lg:flex items-center overflow-x-auto no-scrollbar gap-1.5 py-2 border-t border-zinc-800/80">
         <button
           onClick={() => setActiveTab('dashboard')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
             activeTab === 'dashboard'
               ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
@@ -290,7 +305,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <button
           onClick={() => setActiveTab('mesas')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
             activeTab === 'mesas'
               ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
@@ -302,7 +317,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <button
           onClick={() => setActiveTab('reservas')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition relative ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition relative ${
             activeTab === 'reservas'
               ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
@@ -319,7 +334,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <button
           onClick={() => setActiveTab('pos')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
             activeTab === 'pos'
               ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
@@ -336,7 +351,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               ? `¡Atención! ${pendingComandasCount} comanda(s) pendiente(s) en cocina`
               : 'Cocina (KDS)'
           }
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition relative ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition relative ${
             activeTab === 'kds'
               ? pendingComandasCount > 0
                 ? 'bg-rose-500/25 text-rose-200 border border-rose-500/50 shadow-[0_0_15px_rgba(244,63,94,0.3)] animate-pulse'
@@ -365,7 +380,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <button
           onClick={() => setActiveTab('ventas')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition relative ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition relative ${
             activeTab === 'ventas'
               ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
@@ -393,7 +408,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <button
           onClick={() => setActiveTab('menu')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
             activeTab === 'menu'
               ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
@@ -405,7 +420,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <button
           onClick={() => setActiveTab('inventario')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition relative ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition relative ${
             activeTab === 'inventario'
               ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
@@ -422,7 +437,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <button
           onClick={() => setActiveTab('clientes')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
             activeTab === 'clientes'
               ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
               : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
@@ -434,7 +449,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         <button
           onClick={() => setActiveTab('database')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ml-auto transition cursor-pointer ${
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ml-auto transition cursor-pointer ${
             activeTab === 'database'
               ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 shadow-sm'
               : 'text-emerald-400 hover:text-emerald-300 hover:bg-zinc-900'
@@ -447,6 +462,172 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
         </button>
       </div>
+
+      {/* Mobile Collapsible Hamburger Navigation Drawer */}
+      {isMobileMenuOpen && (
+        <div className="lg:hidden bg-zinc-950 border-t border-zinc-800 p-4 animate-in slide-in-from-top-2 duration-200 shadow-2xl max-h-[80vh] overflow-y-auto">
+          <div className="flex flex-col space-y-2 w-full">
+            <button
+              onClick={() => { setActiveTab('dashboard'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center justify-between w-full p-3.5 rounded-xl text-xs font-semibold transition ${
+                activeTab === 'dashboard'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <LayoutDashboard className="w-4 h-4 text-amber-400" />
+                <span>Dashboard KPIs</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('mesas'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center justify-between w-full p-3.5 rounded-xl text-xs font-semibold transition ${
+                activeTab === 'mesas'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Layers className="w-4 h-4 text-amber-400" />
+                <span>Mesas & Salón</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('reservas'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center justify-between w-full p-3.5 rounded-xl text-xs font-semibold transition ${
+                activeTab === 'reservas'
+                  ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
+                  : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Calendar className="w-4 h-4 text-indigo-400" />
+                <span>Reservas</span>
+              </div>
+              {confirmedReservasCount > 0 && (
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-indigo-600 text-white">
+                  {confirmedReservasCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('pos'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center justify-between w-full p-3.5 rounded-xl text-xs font-semibold transition ${
+                activeTab === 'pos'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <UtensilsCrossed className="w-4 h-4 text-amber-400" />
+                <span>Nueva Comanda (POS)</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('kds'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center justify-between w-full p-3.5 rounded-xl text-xs font-semibold transition ${
+                activeTab === 'kds'
+                  ? 'bg-rose-500/25 text-rose-200 border border-rose-500/50'
+                  : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <ChefHat className="w-4 h-4 text-rose-400" />
+                <span>Cocina (KDS)</span>
+              </div>
+              {pendingComandasCount > 0 && (
+                <span className="px-2 py-0.5 text-[10px] font-black rounded-full bg-rose-500 text-white">
+                  {pendingComandasCount} pendientes
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('ventas'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center justify-between w-full p-3.5 rounded-xl text-xs font-semibold transition ${
+                activeTab === 'ventas'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Receipt className="w-4 h-4 text-amber-400" />
+                <span>Caja & Facturación</span>
+              </div>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${cajaAbierta ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'}`}>
+                {cajaAbierta ? 'Caja Abierta' : 'Caja Cerrada'}
+              </span>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('menu'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center justify-between w-full p-3.5 rounded-xl text-xs font-semibold transition ${
+                activeTab === 'menu'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <BookOpen className="w-4 h-4 text-amber-400" />
+                <span>Menú</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('inventario'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center justify-between w-full p-3.5 rounded-xl text-xs font-semibold transition ${
+                activeTab === 'inventario'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Truck className="w-4 h-4 text-amber-400" />
+                <span>Inventario & Compras</span>
+              </div>
+              {lowStockCount > 0 && (
+                <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-500 text-white">
+                  {lowStockCount} bajo stock
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('clientes'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center justify-between w-full p-3.5 rounded-xl text-xs font-semibold transition ${
+                activeTab === 'clientes'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Users className="w-4 h-4 text-amber-400" />
+                <span>Clientes</span>
+              </div>
+            </button>
+
+            <button
+              onClick={() => { setActiveTab('database'); setIsMobileMenuOpen(false); }}
+              className={`flex items-center justify-between w-full p-3.5 rounded-xl text-xs font-semibold transition ${
+                activeTab === 'database'
+                  ? 'bg-emerald-500/25 text-emerald-300 border border-emerald-500/40'
+                  : 'bg-zinc-900 text-zinc-300 hover:bg-zinc-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Database className="w-4 h-4 text-emerald-400" />
+                <span>Base de Datos (MongoDB Atlas)</span>
+              </div>
+              <span className={`w-2.5 h-2.5 rounded-full ${isMongoConnected ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+            </button>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

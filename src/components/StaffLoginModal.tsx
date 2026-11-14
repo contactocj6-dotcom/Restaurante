@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   X,
   Lock,
@@ -39,6 +39,8 @@ export const StaffLoginModal: React.FC<StaffLoginModalProps> = ({
   const [pinInput, setPinInput] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const pinPadRef = useRef<HTMLDivElement>(null);
 
   if (!isOpen) return null;
 
@@ -183,6 +185,9 @@ export const StaffLoginModal: React.FC<StaffLoginModalProps> = ({
                         setSelectedStaff(u);
                         setPinInput('');
                         setErrorMsg(null);
+                        if (pinPadRef.current) {
+                          pinPadRef.current.scrollIntoView({ behavior: 'smooth' });
+                        }
                       }}
                       className={`w-full p-3 rounded-2xl border text-left transition flex items-center justify-between gap-3 ${
                         isSelected
@@ -232,7 +237,7 @@ export const StaffLoginModal: React.FC<StaffLoginModalProps> = ({
           </div>
 
           {/* Right Column: PIN Keypad */}
-          <div className="flex flex-col items-center justify-center space-y-4 bg-zinc-950/60 p-5 rounded-2xl border border-zinc-800/80">
+          <div ref={pinPadRef} className="flex flex-col items-center justify-center space-y-4 bg-zinc-950/60 p-5 rounded-2xl border border-zinc-800/80">
             {selectedStaff ? (
               <>
                 <div className="text-center space-y-1">
